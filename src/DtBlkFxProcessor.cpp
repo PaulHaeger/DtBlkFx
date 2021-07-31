@@ -19,16 +19,13 @@
 
 #include "DtBlkFxProcessor.h"
 #include "DtBlkFxEditor.h"
+#include <cstring>
 
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
-    : AudioProcessor(BusesProperties()
-#if !JucePlugin_IsMidiEffect
-#  if !JucePlugin_IsSynth
-                         .withInput("Input", juce::AudioChannelSet::stereo(), true)
-#  endif
-                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)
-#endif
-      )
+    : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo())
+                                      .withOutput("Output", juce::AudioChannelSet::stereo())
+                    ),
+    _pre_fft_buffer(2, MAX_FFT_SZ)
 {
 }
 
@@ -41,29 +38,17 @@ const juce::String DtBlkFxAudioProcessor::getName() const
 
 bool DtBlkFxAudioProcessor::acceptsMidi() const
 {
-#if JucePlugin_WantsMidiInput
-  return true;
-#else
   return false;
-#endif
 }
 
 bool DtBlkFxAudioProcessor::producesMidi() const
 {
-#if JucePlugin_ProducesMidiOutput
-  return true;
-#else
   return false;
-#endif
 }
 
 bool DtBlkFxAudioProcessor::isMidiEffect() const
 {
-#if JucePlugin_IsMidiEffect
-  return true;
-#else
   return false;
-#endif
 }
 
 double DtBlkFxAudioProcessor::getTailLengthSeconds() const
@@ -111,28 +96,22 @@ void DtBlkFxAudioProcessor::releaseResources()
   // spare memory, etc.
 }
 
+/**
+ * \brief Checks if the layout is supported.
+ * This method checks whether the given buslayout is supported or not.
+ * \param[in] layouts  The bus layout to check
+ *
+ * \return true if the layout is supported, else false.
+ */
 bool DtBlkFxAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
-#if JucePlugin_IsMidiEffect
-  juce::ignoreUnused(layouts);
-  return true;
-#else
-  // This is the place where you check if the layout is supported.
-  // In this template code we only support mono or stereo.
-  // Some plugin hosts, such as certain GarageBand versions, will only
-  // load plugins that support stereo bus layouts.
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
       layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+  {
     return false;
-
-    // This checks if the input layout matches the output layout
-#  if !JucePlugin_IsSynth
-  if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
-    return false;
-#  endif
+  }
 
   return true;
-#endif
 }
 
 void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
@@ -141,12 +120,12 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   juce::ignoreUnused(midiMessages);
   //SCOPE_NO_FP_EXCEPTIONS_OR_DENORMALS;
 
-  _process(inputs, samps);
+  //_process(inputs, samps);
   for (int i = 0; i < buffer.getNumChannels(); ++i) {
-    PAddOut p(outputs[i]);
-    wrapProcess(p, _chan[i].x3, _x3_o, samps);
+    //PAddOut p(outputs[i]);
+    //wrapProcess(p, _chan[i].x3, _x3_o, samps);
   }
-  _x3_o = wrap(samps + _x3_o, _chan[0].x3);
+  //_x3_o = wrap(samps + _x3_o, _chan[0].x3);
 }
 
 bool DtBlkFxAudioProcessor::hasEditor() const
@@ -178,4 +157,61 @@ void DtBlkFxAudioProcessor::setStateInformation(const void* data, int sizeInByte
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
   return new DtBlkFxAudioProcessor();
+}
+
+
+/**
+ * \brief Appends the given data into the buffer and wraps it if needed.
+ * This method appends the given data into the internal audiobuffer. If the
+ * data would cause an overflow the data is wrapped around the buffer.
+ * \param[in] buffer  The input buffer with the new data
+ *
+ */
+void DtBlkFxAudioProcessor::copyDataToBuffer(const juce::AudioBuffer<float>& buffer)
+{
+    long in_buf_offset;
+    long buf_n = buffer.getNumSamples();
+    while(buf_n){
+        // how many samples to copy
+        long n = buf_n;
+
+        // offset into buffer at which to write data
+        long t = _pre_buffer_index + _pre_buffer_num;
+
+        // wrap to the start of the buffer if need be
+        if (t >= _pre_buffer_size){
+          t -= _pre_buffer_size;
+        }
+
+        // find how much the copy will overflow past _pre_buffer_size
+        long overflow = t + buf_n - _pre_buffer_size;
+
+        // don't overflow at all if there's too much data - I don't expect this to ever happen
+        // (this is the only way that the loop could run more than once)
+        if (overflow > MAX_FFT_SZ) {
+          n -= overflow;
+          overflow = 0;
+        }
+        if (overflow >= 0)
+          _pre_buffer_num_past_end = overflow;
+
+        const size_t copy_len = sizeof(float) *  (n - overflow);
+
+        //Copy all the data into the buffer
+        for(int i = 0; i < _pre_fft_buffer.getNumChannels(); ++i){
+            const float* source_buffer = buffer.getReadPointer(0);
+            float* dest_buffer = _pre_fft_buffer.getWritePointer(0);
+            memcpy(dest_buffer + _pre_buffer_num,
+                        source_buffer,
+                        copy_len);
+            if(overflow > 0){
+               memcpy(dest_buffer, source_buffer + n - overflow,
+                       sizeof(float) * overflow);
+            }
+        }
+
+        buf_n -= n;
+        in_buf_offset += n;
+        _pre_buffer_num += n;
+    }
 }
