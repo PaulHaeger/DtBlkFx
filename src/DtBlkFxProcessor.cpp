@@ -119,12 +119,60 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 {
   juce::ignoreUnused(midiMessages);
   //SCOPE_NO_FP_EXCEPTIONS_OR_DENORMALS;
+  //
+  copyDataToBuffer(buffer);
+  _buf_end_abs += _curr_samp_abs + buffer.getNumSamples();
 
-  //_process(inputs, samps);
-  for (int i = 0; i < buffer.getNumChannels(); ++i) {
-    //PAddOut p(outputs[i]);
-    //wrapProcess(p, _chan[i].x3, _x3_o, samps);
+  while(true){
+      //TODO: Process params
+    // how much extra data is there over what we need to process the blk?
+    _extra_data = _pre_buffer_num + _processed_data_pre_buffer_num - _next_blk_fwd_n - _freq_fft_n;
+
+    // determine whether we are forced to output a blk because of the delay or
+    // we've run out of input buffer
+    bool force_out = (_buf_end_abs - _dst_fft_abs > 0 || _pre_buffer_num >= _pre_buffer_force_out_size);
+
+    // chk whether we should process the blk (forced to output or we have interpolate params
+    // and we have enough data for a blk)
+    bool should_proc = force_out || (_params_state == PARAMS_INTERP_OK && _extra_data >= 0);
+    if (!should_proc)
+      break;
+
+    findBlockInPos();
+
+    //_mixback = get(&GetInterp, _mixback_param);
+    //TODO: Getmixback value
+
+    // blk mix update
+    // _blk_mix_fn_n = get(&GetInterp, _blk_mix_param, _blk_mix_fn);
+
+    if (_mixback >= 1.0f) {
+      prepMixOut();
+      // no ffts because 100% mixback
+      for (int i = 0; i < AUDIO_CHANNELS; i++) {
+        float* x0_dat = _chan[i].x0;
+        mixToX3(P1Src(x0_dat + _x0_i), i);
+      }
+    }
+    else {
+      // normal case, we need to do the FFTs
+      doFFT();
+      if (gui())
+        gui()->FFTDataRdy(0 /*input*/);
+      prepMixOut();
+
+      procFFT();
+      if (gui())
+        gui()->FFTDataRdy(1 /*output*/);
+      ifftAndMixOut();
+    }
+    nextBlk();
+
+    // ensure stop if we run out of data to process
+    if (_extra_data <= 0)
+      break;
   }
+
   //_x3_o = wrap(samps + _x3_o, _chan[0].x3);
 }
 
@@ -214,4 +262,135 @@ void DtBlkFxAudioProcessor::copyDataToBuffer(const juce::AudioBuffer<float>& buf
         in_buf_offset += n;
         _pre_buffer_num += n;
     }
+}
+
+void DtBlkFxAudioProcessor::findBlockInPos()
+{
+  // this should never happen: not enough data to go forward
+  ASSERTX(_next_blk_fwd_n <= _x0_n, VAR(_next_blk_fwd_n) << VAR(_x0_n));
+
+  // move forward in the input buffer
+  _pre_buffer_index += _next_blk_fwd_n;
+  _pre_buffer_num -= _next_blk_fwd_n;
+  _blk_samp_abs += _next_blk_fwd_n;
+
+  // wrap to the start of the buffer (assume fwd_n is < the size of the prebuffer)
+  if (_pre_buffer_index >= _pre_buffer_size)
+    _pre_buffer_index -= _pre_buffer_size;
+
+  // chk whether we have enough data to do blk size & windowing requested
+  if (_extra_data >= 0) {
+    // all good, enough data to process
+  } else if (_time_fft_n <= _pre_buffer_num) {
+    // there's enough data if we don't honour exact spectrum windowing requested
+    _processed_data_pre_buffer_num = _freq_fft_n - _pre_buffer_num;
+    _extra_data = 0;
+
+    // shouldn't happen, x0 pre-data becomes negative
+    ASSERTX(_data_pre_x0_n < 0, VAR(_data_pre_x0_n) << VAR(_x0_n));
+    if (_processed_data_pre_buffer_num < 0)
+      _processed_data_pre_buffer_num = 0;
+  } else {
+    // not enough data, reduce fft length to what data we have
+    _plan = reducePlan(_plan, _pre_buffer_num);
+    _time_fft_n = _freq_fft_n = g_fft_sz[_plan];
+
+    // now do we have enough data?
+    _extra_data = _pre_buffer_num - _freq_fft_n;
+    _processed_data_pre_buffer_num = 0;
+
+    // if there's no extra data then pad with old data
+    if (_extra_data < 0) {
+      _processed_data_pre_buffer_num = -_extra_data;
+      _time_fft_n = _pre_buffer_num;
+      _extra_data = 0;
+    }
+  }
+}
+
+inline void DtBlkFxAudioProcessor::prepMixOut()
+// internal method
+//
+// Prepare to mix blk to output by finding the number of samples that the current blk overlaps
+// with the previous blk (_fadein_n & _fadeout_n)
+//
+{
+  // the amount of xfade-in corresponds to the overlap of this fft blk with existing data
+  _fadein_n = _x3_end_abs - _dst_fft_abs;
+
+  // normal case is not to xfade-out current fft-blk because next blk will do the xfade
+  _fadeout_n = 0;
+
+  // get the absolute ending position of blk
+  long dst_fft_end_abs = _dst_fft_abs + _time_fft_n;
+
+  // how much the new fft blk will increase the amount of data in x3
+  long extend_x3 = dst_fft_end_abs - _x3_end_abs;
+
+  if (_fadein_n >= 0) {
+    // normal case: previous data and the current fft blk overlap, cross-fade
+
+    if (extend_x3 < 0) {
+      // special case: current fft blk ends up entirely within existing x3 data,
+
+      // do nothing if the blk ends prior to the current output position (should not happen)
+      if (_curr_samp_abs - dst_fft_end_abs >= 0) {
+        //TODO: LOG("", "mixToOutputBuffer possible ERROR" << VAR(_curr_samp_abs - dst_fft_end_abs));
+        return;
+      }
+
+      // cross fade all of fft blk in & out
+      _fadein_n = _time_fft_n / 2;
+      _fadeout_n = _time_fft_n - _fadein_n;
+
+      // one case is not handled, part of current blk is before current sample position
+      // (should never happen)
+    }
+  }
+  else {
+    // special case: there is a gap between the end of prev data and the current fft blk
+
+    // zero-fill gap (and a bit extra because we will still cross-fade to the current blk)
+    long zero_o = _x3_end_abs - _curr_samp_abs;
+    long zero_n = -_fadein_n;
+
+    // arbitrary fade in of current fft blk
+    _fadein_n = 16;
+
+    // zero data in the gap (unless x3 is already cleared)
+    if (!_x3_is_clear) {
+      PZero pzero;
+      for (int i = 0; i < AUDIO_CHANNELS; i++)
+        wrapProcess(pzero, _chan[i].x3, _x3_o + zero_o, zero_n + _fadein_n);
+    }
+    _x3_is_clear = false;
+
+    // arbitrary fade out of previous data
+    long prev_fade_n = 16;
+    long prev_fade_o = zero_o - prev_fade_n;
+
+    // don't fade data that has already been output
+    if (prev_fade_o < 0) {
+      prev_fade_n += prev_fade_o;
+      prev_fade_o = 0;
+    }
+    if (prev_fade_n > 0) {
+      for (int i = 0; i < AUDIO_CHANNELS; i++) {
+        PSrcDstWrap<PNoSrc, PRampDst> p;
+        p.dst.setMix(/*start*/ 1, /*end*/ 0);
+        wrapProcess(p, _chan[i].x3, _x3_o + prev_fade_o, prev_fade_n);
+      }
+    }
+    // LOG("", "mixToOutputBuffer gap" << VAR(zero_o) << VAR(zero_n) << VAR(prev_fade_n) <<
+    // VAR(prev_fade_o));
+  }
+
+  // update the end position of data in x3 if it is extended (this is slightly early but that
+  // doesn't matter)
+  if (extend_x3 > 0)
+    _x3_end_abs = dst_fft_end_abs;
+
+  // ensure fade in is not too big
+  if (_fadein_n > _time_fft_n)
+    _fadein_n = _time_fft_n;
 }

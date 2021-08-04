@@ -17,16 +17,22 @@
  * along with DtBlkFx.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 #include "MorphParam.h"
 #include <fftw3.h>
 #include <memory>
 
-#pragma once
+#include  "rfftw_float.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
 class DtBlkFxAudioProcessor : public juce::AudioProcessor {
     void copyDataToBuffer(const juce::AudioBuffer<float>& buffer);
+    void findBlockInPos();
+    void prepMixOut();
+
+    inline static long reducePlan(long plan /*start*/, long avail_samps);
 public:
     DtBlkFxAudioProcessor();
     ~DtBlkFxAudioProcessor() override;
@@ -63,7 +69,13 @@ private:
 
     juce::AudioBuffer<float> _buffer; //Buffer for storing remaining samples
 
-    fftw_plan g_fft_plan
+    fftw_plan g_fft_plan;
+
+    // number of samples we overlap with prev blk
+    long _fadein_n;
+
+    // normally 0, number of samples we overlap with existing data
+    long _fadeout_n;
 
 public:
     MorphParam _mixback_param;
@@ -138,8 +150,15 @@ public:
     long _plan;    // actual plan (maybe different from desired plan if forced to output data early)
     long _delay_n; // output delay
 
-    long _freq_fft_n; // actual fft blk sz processed (may not correspond to _desired_plan if output
-                    // forced early)
+    long _freq_fft_n;   // actual fft blk sz processed (may not correspond to _desired_plan if output
+                        // forced early)
+
+    // destination absolute sample position for current fft blk (i.e. blk_samp_abs + delay)
+    long _dst_fft_abs;
+
+    // actual amount of data in the block that we are interested in (use in conjunction
+    // with _time_offset)
+    long _time_fft_n;
 
     #define MAX_FFT_SZ 2048 //TODO: REPLACE THIS
 
@@ -151,6 +170,11 @@ public:
 
     // all state for DtBlkFx params are stored here
     //Array<FxState1_0, BlkFxParam::NUM_FX_SETS> _fx1_0;
+    long _buf_end_abs = 0; //Absolute end position of the buffer
+    long _extra_data = 0;
+    // corresponds to the amount of old data that we've fft'd (data prior to _x0_i)
+    long _processed_data_pre_buffer_num;
+
 
     // channel specific data
     struct ChannelData {
@@ -169,7 +193,19 @@ public:
     };
     ChannelData _chan[2];//Mono and stereo supported, for mono channel 0 is used
 
+    // mixback multiplier
+    float _mixback;
 public:
   // contiguous space for chunk data & presets when saving
   std::valarray<unsigned char> _chunk_data;
 };
+
+inline /*static*/ long DtBlkFxAudioProcessor::reducePlan(long plan /*start*/, long avail_samps)
+// static method
+// given "avail_samps", return plan that corresponds to data that is at most twice the length
+//
+{
+  while (plan > 0 && g_fft_sz[plan] / 2 > avail_samps)
+    plan--;
+  return plan;
+}
