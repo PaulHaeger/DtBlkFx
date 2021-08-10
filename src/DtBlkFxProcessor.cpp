@@ -19,6 +19,7 @@
 
 #include "DtBlkFxProcessor.h"
 #include "DtBlkFxEditor.h"
+#include "wrapprocessfloatvec.h"
 #include <cstring>
 
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
@@ -346,8 +347,7 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
       // one case is not handled, part of current blk is before current sample position
       // (should never happen)
     }
-  }
-  else {
+  } else {
     // special case: there is a gap between the end of prev data and the current fft blk
 
     // zero-fill gap (and a bit extra because we will still cross-fade to the current blk)
@@ -360,8 +360,9 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
     // zero data in the gap (unless x3 is already cleared)
     if (!_x3_is_clear) {
       PZero pzero;
-      for (int i = 0; i < AUDIO_CHANNELS; i++)
-        wrapProcess(pzero, _chan[i].x3, _x3_o + zero_o, zero_n + _fadein_n);
+      for (int i = 0; i < x3.getNumChannels(); ++i){
+        wrapProcess(pzero, x3.getWritePointer(i), _x3_o + zero_o, zero_n + _fadein_n);
+      }
     }
     _x3_is_clear = false;
 
@@ -375,10 +376,10 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
       prev_fade_o = 0;
     }
     if (prev_fade_n > 0) {
-      for (int i = 0; i < AUDIO_CHANNELS; i++) {
+      for (int i = 0; i < x3.getNumChannels(); ++i) {
         PSrcDstWrap<PNoSrc, PRampDst> p;
         p.dst.setMix(/*start*/ 1, /*end*/ 0);
-        wrapProcess(p, _chan[i].x3, _x3_o + prev_fade_o, prev_fade_n);
+        wrapProcess(p, x3.getWritePointer(i), _x3_o + prev_fade_o, prev_fade_n);
       }
     }
     // LOG("", "mixToOutputBuffer gap" << VAR(zero_o) << VAR(zero_n) << VAR(prev_fade_n) <<
@@ -393,4 +394,39 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
   // ensure fade in is not too big
   if (_fadein_n > _time_fft_n)
     _fadein_n = _time_fft_n;
+}
+
+template <typename SRC> inline void DtBlkFxAudioProcessor::mixToX3(SRC src, int ch)
+// internal method
+//
+{
+  // position to start fade-in
+  long x3_o = _dst_fft_abs - _curr_samp_abs + _x3_o;
+
+  // use lerp'd mix function for fade in
+  if (_fadein_n > 0) {
+    PLinInterp<PMix<SRC>> p(_blk_mix_fn, _blk_mix_fn_n);
+    p.proc.src = src;
+    x3_o = wrapProcess(p, x3.getWritePointer(ch), x3_o, _fadein_n);
+    src = p.proc.src;
+  }
+
+  // number of samples in mid section
+  long cp_n = _time_fft_n - _fadein_n - _fadeout_n;
+
+  // copy mid section
+  if (cp_n > 0) {
+    PSrcDstWrap<SRC, PBlatDst> p;
+    p.src = src;
+    x3_o = wrapProcess(p, x3.getWritePointer(ch), x3_o, cp_n);
+    src = p.src;
+  }
+
+  // linear cross-mix
+  if (_fadeout_n > 0) {
+    PSrcDstWrap<SRC, PMixDst> p;
+    p.src = src;
+    p.dst.setMix(/*start*/ 0, /*end*/ 1);
+    wrapProcess(p, x3.getWritePointer(ch), x3_o, _fadeout_n);
+  }
 }

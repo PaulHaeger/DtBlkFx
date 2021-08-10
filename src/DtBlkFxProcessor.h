@@ -32,6 +32,9 @@ class DtBlkFxAudioProcessor : public juce::AudioProcessor {
     void findBlockInPos();
     void prepMixOut();
 
+protected:
+    template <typename SRC> void mixToX3(SRC src, int ch);
+
     inline static long reducePlan(long plan /*start*/, long avail_samps);
 public:
     DtBlkFxAudioProcessor();
@@ -136,6 +139,7 @@ public:
     long _pre_buffer_num_past_end; // number of samples copied past _x0_sz
 
     long _x3_size;       // total size of x3
+    long _x3_o;        // output FIFO output index
     long _x3_i;        // output FIFO output index
     long _x3_end_abs;  // 1 + abs sample position of final sample in _x3
     bool _x3_is_clear; // true when x3 is initialized with 0's
@@ -163,6 +167,7 @@ public:
     #define MAX_FFT_SZ 2048 //TODO: REPLACE THIS
 
     juce::AudioBuffer<float> _pre_fft_buffer; //Buffer for pre FFT Samples
+    juce::AudioBuffer<float> x3;
 
     // block mix function generated from _blk_mix_param
     Array<float, 32> _blk_mix_fn;
