@@ -150,9 +150,9 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     if (_mixback >= 1.0f) {
       prepMixOut();
       // no ffts because 100% mixback
-      for (int i = 0; i < AUDIO_CHANNELS; i++) {
-        float* x0_dat = _chan[i].x0;
-        mixToX3(P1Src(x0_dat + _x0_i), i);
+      for (int i = 0; i < _pre_fft_buffer.getNumChannels(); ++i) {
+        float* x0_dat = _pre_fft_buffer.getWritePointer(i);
+        mixToX3(P1Src(x0_dat + _pre_buffer_index), i);
       }
     }
     else {
@@ -428,5 +428,101 @@ template <typename SRC> inline void DtBlkFxAudioProcessor::mixToX3(SRC src, int 
     p.src = src;
     p.dst.setMix(/*start*/ 0, /*end*/ 1);
     wrapProcess(p, x3.getWritePointer(ch), x3_o, _fadeout_n);
+  }
+}
+
+void DtBlkFxAudioProcessor::doFFT(){
+  int i;
+
+  // work out where we'll transform from
+  long x0_xform_i = _pre_buffer_index - _processed_data_pre_buffer_num;//TODO check if this is _data_pre_x0_n
+  if (x0_xform_i < 0)
+    x0_xform_i += _pre_buffer_size;
+
+  // find the amount of shoulder data that we can apply a window function to (window is symmetrical)
+  int shoulder_n =
+      std::min(/*right*/ _processed_data_pre_buffer_num, /*left*/ _freq_fft_n - _time_fft_n - _processed_data_pre_buffer_num);
+
+  // if the shoulder windowing needs to be applied then we'll copy input data to "x2", window and
+  // then transform
+  if (shoulder_n > /*arbirary*/ 12) {
+
+    // get the shoulder function to apply
+    Array<float, 48> shoulder_fn;
+    int shoulder_fn_n = get(&GetInterp, _blk_shoulder_wdw_param, shoulder_fn);
+
+    for (i = 0; i < _pre_fft_buffer.getNumChannels(); ++i) {
+      // position within x0
+      long x0_x = x0_xform_i;
+
+      // get x0 data range excluding overflow region
+      Rng<float> x0(_pre_fft_buffer.getWritePointer(i), _pre_buffer_num);
+
+      // apply window to left shoulder
+      PLinInterp<PScaleCopyOut> p0(shoulder_fn, shoulder_fn_n);
+      p0.proc.dst = _chan[0].x2; // always channel 0 to improve caching performance
+      x0_x = wrapProcess(p0, x0, x0_x, shoulder_n);
+
+      // copy mid section directly
+      PCopyOut p1;
+      p1.dst = p0.proc.dst;
+      x0_x = wrapProcess(p1, x0, x0_x, _freq_fft_n - shoulder_n * 2);
+
+      // apply window to right shoulder
+      PLinInterp<PScaleCopyOut, /*reverse*/ 1> p2(shoulder_fn, shoulder_fn_n);
+      p2.proc.dst = p1.dst;
+      x0_x = wrapProcess(p2, x0, x0_x, shoulder_n);
+
+      // and do the fft
+      FFTWf::execute_dft_r2c(g_fft_plan[_plan], _chan[0].x2, to_fftwf_complex(FFTdata(i)));
+    }
+  }
+  else {
+    // do some data alignment to keep fftw happy
+
+    // adjust pre-data to do the rounding
+    int round_down = x0_xform_i & ~X0_INDEX_ROUNDING_MASK;
+    x0_xform_i -= round_down;
+    _extra_data += round_down;
+    _processed_data_pre_buffer_num += round_down;
+    _time_fft_n -= round_down;
+
+    // shouldn't happen
+    ASSERTX(_time_fft_n >= 0, VAR(_time_fft_n));
+    if (_time_fft_n < 0)
+      _time_fft_n = 0;
+
+    // no windowing of data, make sure it is contiguous in x0 if it has wrapped past the end
+    long x0_sz_ext = _pre_buffer_size + _pre_buffer_num_past_end;
+    long split_n = (x0_xform_i + _freq_fft_n) - x0_sz_ext;
+    if (split_n > 0) {
+      for (i = 0; i < _pre_fft_buffer.getNumChannels(); ++i) {
+        float* x0_dat = _pre_fft_buffer.getWritePointer(i);
+        memcpy(x0_dat + x0_sz_ext, x0_dat + _pre_buffer_num_past_end, split_n);
+      }
+      _pre_buffer_num_past_end += split_n;
+    }
+
+    // do the fft
+    for (i = 0; i < _pre_fft_buffer.getNumChannels(); ++i) {
+      float* x0_dat = _pre_fft_buffer.getWritePointer(i);
+      FFTWf::execute_dft_r2c(g_fft_plan[_plan], x0_dat + x0_xform_i, to_fftwf_complex(FFTdata(i)));
+    }
+  }
+
+  // scale spectrum and find power for power matching
+  float scale = 1.0f / (float)_freq_fft_n;
+  for (i = 0; i < x3.getNumChannels(); ++i) {
+    // find power of spectrum (so that we can match to this afterwards)
+    float acc = 0.0f;
+
+    CplxfPtrPair in(FFTdata(i), _freq_fft_n / 2 + 1);
+    for (; !in.equal(); in.a++) {
+      in() = in() * scale;
+      acc += norm(*in.a);
+    }
+
+    _chan[i].total_out_pwr = acc;
+    _chan[i].total_in_pwr = acc;
   }
 }

@@ -33,9 +33,11 @@ protected:
     void copyDataToBuffer(const juce::AudioBuffer<float>& buffer);
     void findBlockInPos();
     void prepMixOut();
+    void doFFT();
     template <typename SRC> void mixToX3(SRC src, int ch);
 
     inline static long reducePlan(long plan /*start*/, long avail_samps);
+    cplxf* FFTdata(int ch) { return x1.getWritePointer(ch) + 32; }
 public:
     DtBlkFxAudioProcessor();
     ~DtBlkFxAudioProcessor() override;
@@ -167,6 +169,7 @@ public:
     #define MAX_FFT_SZ 2048 //TODO: REPLACE THIS
 
     juce::AudioBuffer<float> _pre_fft_buffer; //Buffer for pre FFT Samples
+    juce::AudioBuffer<cplxf> x1;
     juce::AudioBuffer<float> x3;
 
     // block mix function generated from _blk_mix_param
@@ -183,7 +186,7 @@ public:
 
     // channel specific data
     struct ChannelData {
-        ScopeFFTWfMalloc<float> x0; // pre FFT circular buffer, note: special alignment
+        ScopeFFTWfMalloc<float> x0; // pre FFT circular buffer, note: special alignment //TODO Check aligment
         ScopeFFTWfMalloc<cplxf> x1; // FFT'd data (frequency-domain), note: special alignment
         ScopeFFTWfMalloc<float> x2; // IFFT'd data (time-domain) and may be used as a temporary buffer
                                     // during effects, note: special alignment
