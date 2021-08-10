@@ -28,11 +28,11 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 class DtBlkFxAudioProcessor : public juce::AudioProcessor {
+
+protected:
     void copyDataToBuffer(const juce::AudioBuffer<float>& buffer);
     void findBlockInPos();
     void prepMixOut();
-
-protected:
     template <typename SRC> void mixToX3(SRC src, int ch);
 
     inline static long reducePlan(long plan /*start*/, long avail_samps);
