@@ -16,10 +16,15 @@
  * You should have received a copy of the GNU General Public License
  * along with DtBlkFx.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include <stdio.h>
+#include <string.h>
+
+#include "wrapprocessfloatvec.h"
 
 #include "DtBlkFxProcessor.h"
 #include "DtBlkFxEditor.h"
-#include "wrapprocessfloatvec.h"
+#include "rfftw_float.h"
+
 #include <cstring>
 
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
@@ -144,27 +149,31 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     //_mixback = get(&GetInterp, _mixback_param);
     //TODO: Getmixback value
 
-    // blk mix update
-    // _blk_mix_fn_n = get(&GetInterp, _blk_mix_param, _blk_mix_fn);
+        // blk mix update
+        // _blk_mix_fn_n = get(&GetInterp, _blk_mix_param, _blk_mix_fn);
 
-    if (_mixback >= 1.0f) {
-      prepMixOut();
-      // no ffts because 100% mixback
-      for (int i = 0; i < _pre_fft_buffer.getNumChannels(); ++i) {
-        float* x0_dat = _pre_fft_buffer.getWritePointer(i);
-        mixToX3(P1Src(x0_dat + _pre_buffer_index), i);
-      }
-    }
+        if (_mixback >= 1.0f) {
+          prepMixOut();
+          // no ffts because 100% mixback
+          for (int i = 0; i < _pre_fft_buffer.getNumChannels(); ++i) {
+            float* x0_dat = _pre_fft_buffer.getWritePointer(i);
+            mixToX3(P1Src(x0_dat + _pre_buffer_index), i);
+          }
+        }
     else {
       // normal case, we need to do the FFTs
       doFFT();
-      if (gui())
-        gui()->FFTDataRdy(0 /*input*/);
+      //if (gui())
+      //  gui()->FFTDataRdy(0 /*input*/);
+      if (hasEditor()) {
+          //TODO Gui Connection
+      }
+
       prepMixOut();
 
       procFFT();
-      if (gui())
-        gui()->FFTDataRdy(1 /*output*/);
+      if (hasEditor())
+        //gui()->FFTDataRdy(1 /*output*/);
       ifftAndMixOut();
     }
     nextBlk();
@@ -525,4 +534,38 @@ void DtBlkFxAudioProcessor::doFFT(){
     _chan[i].total_out_pwr = acc;
     _chan[i].total_in_pwr = acc;
   }
+}
+
+void DtBlkFxAudioProcessor::procFFT()
+{
+int i;
+
+// run all of the 1.0 effects (collect params first & then process)
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i)
+    _fx1_0[i].prepare();
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i)
+    _fx1_0[i].process();
+
+// power match amount
+float pwr_match = get(&GetInterp, _pwr_match_param);
+
+// post process, work pwr out scaling
+for (i = 0; i < AUDIO_CHANNELS; i++) {
+
+float out_pwr = GetPwr(FFTdata(i), _freq_fft_n / 2 + 1);
+
+// match the output to the input power
+// power match mode, scale output to match input power
+double pwr_scale = 1.0f;
+if (out_pwr > 1e-30)
+    pwr_scale *= _chan[i].total_in_pwr / out_pwr;
+
+if (pwr_scale > 1e30)
+    pwr_scale = 1.0f; // too big
+if (pwr_scale < 1e-30)
+    pwr_scale = 0.0f; // too small (or worse, negative)
+
+_chan[i].out_pwr_scale = lin_interp(pwr_match, 1.0f, (float)pwr_scale);
+_chan[i].out_scale = sqrtf(_chan[i].out_pwr_scale);
+}
 }

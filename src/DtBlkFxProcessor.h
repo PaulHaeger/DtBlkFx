@@ -22,6 +22,7 @@
 #include "MorphParam.h"
 #include <fftw3.h>
 #include <memory>
+#include "FxState1_0.h"
 
 #include  "rfftw_float.h"
 
@@ -34,6 +35,7 @@ protected:
     void findBlockInPos();
     void prepMixOut();
     void doFFT();
+    void procFFT();
     template <typename SRC> void mixToX3(SRC src, int ch);
 
     inline static long reducePlan(long plan /*start*/, long avail_samps);
@@ -69,12 +71,19 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+
+    float /*bin*/ getFFTBin(float /*0..1*/ param)
+    {
+        return limit_range(
+        _freq_fft_n * BlkFxParam::getHz(param) / getSampleRate(), 0.0f, _freq_fft_n * 0.5f);
+    }
+
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DtBlkFxAudioProcessor)
 
     juce::AudioBuffer<float> _buffer; //Buffer for storing remaining samples
 
-    fftw_plan g_fft_plan;
+    //fftw_plan g_fft_plan[2];
 
     // number of samples we overlap with prev blk
     long _fadein_n;
@@ -203,6 +212,7 @@ public:
 
     // mixback multiplier
     float _mixback;
+    Array<FxState1_0, BlkFxParam::NUM_FX_SETS> _fx1_0;
 public:
   // contiguous space for chunk data & presets when saving
   std::valarray<unsigned char> _chunk_data;
