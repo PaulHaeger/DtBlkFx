@@ -172,8 +172,9 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
       prepMixOut();
 
       procFFT();
-      if (hasEditor())
+      if (hasEditor()){
         //gui()->FFTDataRdy(1 /*output*/);
+        }
       ifftAndMixOut();
     }
     nextBlk();
@@ -369,8 +370,8 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
     // zero data in the gap (unless x3 is already cleared)
     if (!_x3_is_clear) {
       PZero pzero;
-      for (int i = 0; i < x3.getNumChannels(); ++i){
-        wrapProcess(pzero, x3.getWritePointer(i), _x3_o + zero_o, zero_n + _fadein_n);
+      for (int i = 0; i < _x3.getNumChannels(); ++i){
+        wrapProcess(pzero, _x3.getWritePointer(i), _x3_o + zero_o, zero_n + _fadein_n);
       }
     }
     _x3_is_clear = false;
@@ -385,10 +386,10 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
       prev_fade_o = 0;
     }
     if (prev_fade_n > 0) {
-      for (int i = 0; i < x3.getNumChannels(); ++i) {
+      for (int i = 0; i < _x3.getNumChannels(); ++i) {
         PSrcDstWrap<PNoSrc, PRampDst> p;
         p.dst.setMix(/*start*/ 1, /*end*/ 0);
-        wrapProcess(p, x3.getWritePointer(i), _x3_o + prev_fade_o, prev_fade_n);
+        wrapProcess(p, _x3.getWritePointer(i), _x3_o + prev_fade_o, prev_fade_n);
       }
     }
     // LOG("", "mixToOutputBuffer gap" << VAR(zero_o) << VAR(zero_n) << VAR(prev_fade_n) <<
@@ -416,7 +417,7 @@ template <typename SRC> inline void DtBlkFxAudioProcessor::mixToX3(SRC src, int 
   if (_fadein_n > 0) {
     PLinInterp<PMix<SRC>> p(_blk_mix_fn, _blk_mix_fn_n);
     p.proc.src = src;
-    x3_o = wrapProcess(p, x3.getWritePointer(ch), x3_o, _fadein_n);
+    x3_o = wrapProcess(p, _x3.getWritePointer(ch), x3_o, _fadein_n);
     src = p.proc.src;
   }
 
@@ -427,7 +428,7 @@ template <typename SRC> inline void DtBlkFxAudioProcessor::mixToX3(SRC src, int 
   if (cp_n > 0) {
     PSrcDstWrap<SRC, PBlatDst> p;
     p.src = src;
-    x3_o = wrapProcess(p, x3.getWritePointer(ch), x3_o, cp_n);
+    x3_o = wrapProcess(p, _x3.getWritePointer(ch), x3_o, cp_n);
     src = p.src;
   }
 
@@ -436,7 +437,7 @@ template <typename SRC> inline void DtBlkFxAudioProcessor::mixToX3(SRC src, int 
     PSrcDstWrap<SRC, PMixDst> p;
     p.src = src;
     p.dst.setMix(/*start*/ 0, /*end*/ 1);
-    wrapProcess(p, x3.getWritePointer(ch), x3_o, _fadeout_n);
+    wrapProcess(p, _x3.getWritePointer(ch), x3_o, _fadeout_n);
   }
 }
 
@@ -521,7 +522,7 @@ void DtBlkFxAudioProcessor::doFFT(){
 
   // scale spectrum and find power for power matching
   float scale = 1.0f / (float)_freq_fft_n;
-  for (i = 0; i < x3.getNumChannels(); ++i) {
+  for (i = 0; i < _x3.getNumChannels(); ++i) {
     // find power of spectrum (so that we can match to this afterwards)
     float acc = 0.0f;
 
@@ -541,10 +542,12 @@ void DtBlkFxAudioProcessor::procFFT()
 int i;
 
 // run all of the 1.0 effects (collect params first & then process)
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i)
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
     _fx1_0[i].prepare();
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i)
+}
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
     _fx1_0[i].process();
+}
 
 // power match amount
 float pwr_match = get(&GetInterp, _pwr_match_param);
@@ -568,4 +571,42 @@ if (pwr_scale < 1e-30)
 _chan[i].out_pwr_scale = lin_interp(pwr_match, 1.0f, (float)pwr_scale);
 _chan[i].out_scale = sqrtf(_chan[i].out_pwr_scale);
 }
+}
+
+void ifftAndMixOut(){
+  // do iFFT, then fade-in, direct copy and fade-out to output buffer
+  for (int i = 0; i < _x2.getNumChannels(); ++i) {
+    //float* x2 = _chan[0].x2; // always use x2 from ch0 to help cache performance
+    float* x2 = _x2.getWritePointer(i, 0);
+
+    // inverse fft, always ifft into channel-0 x2 to improve cache hits
+    FFTWf::execute_dft_c2r(g_ifft_plan[_plan], /*in*/ to_fftwf_complex(FFTdata(i)), /*out*/ x2);
+
+    // skip pre data
+    x2 += _data_pre_x0_n;
+
+#if 0
+    // scale data
+    for(int j = 0; j < _time_fft_n; j++) x2[j] *= chan.out_scale;
+
+    // line mixer
+    float* x1 = (float*)chan.x1.ptr;
+    LineMix(/*in*/x2, /*in*/chan.x0+_x0_i, /*out*/x1, _time_fft_n, _mixback, /*yscale*/100);
+    mixToX3(P1Src(x1, /*scale*/1), i);
+#endif
+
+    // output data is completely fft blk
+    float x2_scale = (1.0f - _mixback) * chan.out_scale;
+    if (_mixback <= 0.0f)
+      mixToX3(P1Src(x2, x2_scale), i);
+
+    else {
+      // output data is a mix of original and processed
+      P2Src src;
+      float* x0_dat = chan.x0;
+      src.a = P1Src(x0_dat + _x0_i, _mixback);
+      src.b = P1Src(x2, x2_scale);
+      mixToX3(src, i);
+    }
+  }
 }

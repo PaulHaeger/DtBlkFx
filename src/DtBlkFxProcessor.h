@@ -36,10 +36,11 @@ protected:
     void prepMixOut();
     void doFFT();
     void procFFT();
+	void ifftAndMixOut();
     template <typename SRC> void mixToX3(SRC src, int ch);
 
     inline static long reducePlan(long plan /*start*/, long avail_samps);
-    cplxf* FFTdata(int ch) { return x1.getWritePointer(ch) + 32; }
+    cplxf* FFTdata(int ch) { return _x1.getWritePointer(ch) + 32; }
 public:
     DtBlkFxAudioProcessor();
     ~DtBlkFxAudioProcessor() override;
@@ -178,8 +179,9 @@ public:
     #define MAX_FFT_SZ 2048 //TODO: REPLACE THIS
 
     juce::AudioBuffer<float> _pre_fft_buffer; //Buffer for pre FFT Samples
-    juce::AudioBuffer<cplxf> x1;
-    juce::AudioBuffer<float> x3;
+    juce::AudioBuffer<cplxf> _x1;
+    juce::AudioBuffer<float> _x2;
+    juce::AudioBuffer<float> _x3;
 
     // block mix function generated from _blk_mix_param
     Array<float, 32> _blk_mix_fn;
