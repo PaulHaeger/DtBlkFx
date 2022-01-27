@@ -7,7 +7,7 @@ Wrap process
 
 History
         Date       Version    Programmer         Comments
-        16/2/03    1.0        Darrell Tam		Created
+        16/2/03    1.0        Darrell Tam       Created
 
 This is completely free software
 
@@ -51,7 +51,7 @@ struct PNoSrc {
 };
 struct P1Src {
   float *ptr, scale;
-  P1Src(float* ptr_ = NULL, float scale_ = 1)
+  P1Src(float* ptr_ = nullptr, float scale_ = 1)
   {
     ptr = ptr_;
     scale = scale_;
@@ -84,7 +84,7 @@ struct PMixDst
     mix.stp = end - start;
   }
 
-  void setLen(long n) { mix.stp /= (float)n; }
+  void setLen(long n) { mix.stp /= static_cast<float>(n); }
   void operator()(float* dst, float src)
   {
     *dst = *dst * mix + src * (1 - mix);
@@ -134,7 +134,7 @@ struct PCopyOut
 // x => dst
 {
   float* dst;
-  PCopyOut(float* dst_ = NULL) { dst = dst_; }
+  PCopyOut(float* dst_ = nullptr) { dst = dst_; }
   void process(float* src, long n)
   {
     memcpy(dst, src, n * sizeof(float));
@@ -148,11 +148,11 @@ struct PAddOut
 // add FIFO data "x" to dst (non-FIFO buffer)
 // x + dst => dst
 {
-  PAddOut(float* dst_ = NULL) { dst = dst_; }
+  PAddOut(float* dst_ = nullptr) { dst = dst_; }
   void process(float* x, long n)
   {
     float* xe = x + n;
-    for (; x != xe; x++)
+    for (; x != xe; ++x)
       *dst++ += *x;
   }
 };
@@ -187,19 +187,19 @@ public: // internal variables to PLinInterp_
   ValStp<float> curr_mult;
 
 public:
-  PLinInterp(Rng<float> interp_ /*length must be >=2*/)
+  explicit PLinInterp(Rng<float> interp_ /* length must be >=2 */)
+      :interp(interp_), interp_i(0), fseg_len(0.f), inv_seg(0.f),
+      fseg_next(0.f),  seg_next(0), samp_i(0)
   // interp_ is data to be resampled & passed to INTERP_PROC() to match length passed to setLen()
-  {
-    interp = interp_;
-  }
+  {}
 
   PLinInterp(float* interp_data, int interp_len /*must be >=2*/)
-  {
-    interp = toRng(interp_data, interp_len);
-  }
+      :interp(toRng(interp_data, interp_len)), interp_i(0), fseg_len(0.f), inv_seg(0.f),
+      fseg_next(0.f),  seg_next(0), samp_i(0)
+  {}
 
 public: // called by wrapProcess
-  //	"interp" data will be resampled to length "dst_n"
+  //    "interp" data will be resampled to length "dst_n"
   void setLen(long dst_n)
   {
     // init
@@ -207,7 +207,7 @@ public: // called by wrapProcess
     seg_next = 0;
     fseg_next = 0;
     samp_i = 0;
-    fseg_len = (float)dst_n / (float)(interp.n - 1);
+    fseg_len = static_cast<float>(dst_n) / static_cast<float>((interp.n - 1));
     inv_seg = 1 / fseg_len;
     proc.setLen(dst_n);
   }
@@ -231,7 +231,7 @@ public: // called by wrapProcess
         dst_e = dst_e_final;
       }
       // sample position after processing
-      samp_i += (long)(dst_e - dst);
+      samp_i += static_cast<float>(dst_e - dst);
 
       // process segment
       while (dst < dst_e) {
@@ -257,12 +257,12 @@ public: // internal method
     curr_mult.stp = (interp[interp_i] - curr_interp) * inv_seg;
 
     // work out start value for this segment
-    float frac = (float)samp_i - fseg_next;
+    float frac = static_cast<float>(samp_i) - fseg_next;
     curr_mult.val = curr_interp + curr_mult.stp * frac;
 
     // prepare for next interp segment
     fseg_next += fseg_len;
-    seg_next = (long)ceilf(fseg_next);
+    seg_next = static_cast<long>(ceilf(fseg_next));
   }
 };
 
@@ -275,7 +275,7 @@ template <class SRC> struct PMix {
 struct PScaleCopyOut {
   float* dst;
   void setLen(long n) {}
-  void operator()(float* src, float mix) { *dst++ = *src * mix; }
+  void operator()(const float* src, float mix) { *dst++ = *src * mix; }
 };
 
 #endif
