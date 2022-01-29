@@ -146,11 +146,11 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
     findBlockInPos();
 
-    //_mixback = get(&GetInterp, _mixback_param);
-    //TODO: Getmixback value
+    _mixback = get(&GetInterp, _mixback_param);
+
 
         // blk mix update
-        // _blk_mix_fn_n = get(&GetInterp, _blk_mix_param, _blk_mix_fn);
+        _blk_mix_fn_n = get(&GetInterp, _blk_mix_param, _blk_mix_fn);
 
         if (_mixback >= 1.0f) {
           prepMixOut();
@@ -527,7 +527,7 @@ void DtBlkFxAudioProcessor::doFFT(){
     float acc = 0.0f;
 
     CplxfPtrPair in(FFTdata(i), _freq_fft_n / 2 + 1);
-    for (; !in.equal(); in.a++) {
+    for (; !in.equal(); ++(in.a)) {
       in() = in() * scale;
       acc += norm(*in.a);
     }
@@ -539,39 +539,40 @@ void DtBlkFxAudioProcessor::doFFT(){
 
 void DtBlkFxAudioProcessor::procFFT()
 {
-int i;
+    int i;
 
-// run all of the 1.0 effects (collect params first & then process)
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
-    _fx1_0[i].prepare();
+    // run all of the 1.0 effects (collect params first & then process)
+    for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
+        _fx1_0[i].prepare();
+    }
+    for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
+        _fx1_0[i].process();
+    }
+
+    // power match amount
+    float pwr_match = get(&GetInterp, _pwr_match_param);
+
+    // post process, work pwr out scaling
+    for (i = 0; i < AUDIO_CHANNELS; ++i) {
+
+        float out_pwr = GetPwr(FFTdata(i), _freq_fft_n / 2 + 1);
+
+        // match the output to the input power
+        // power match mode, scale output to match input power
+        double pwr_scale = 1.0f;
+        if (out_pwr > 1e-30)
+            pwr_scale *= _chan[i].total_in_pwr / out_pwr;
+
+        if (pwr_scale > 1e30)
+            pwr_scale = 1.0f; // too big
+        if (pwr_scale < 1e-30)
+            pwr_scale = 0.0f; // too small (or worse, negative)
+
+        _chan[i].out_pwr_scale = lin_interp(pwr_match, 1.0f, (float)pwr_scale);
+        _chan[i].out_scale = sqrtf(_chan[i].out_pwr_scale);
+    }
 }
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
-    _fx1_0[i].process();
-}
 
-// power match amount
-float pwr_match = get(&GetInterp, _pwr_match_param);
-
-// post process, work pwr out scaling
-for (i = 0; i < AUDIO_CHANNELS; i++) {
-
-float out_pwr = GetPwr(FFTdata(i), _freq_fft_n / 2 + 1);
-
-// match the output to the input power
-// power match mode, scale output to match input power
-double pwr_scale = 1.0f;
-if (out_pwr > 1e-30)
-    pwr_scale *= _chan[i].total_in_pwr / out_pwr;
-
-if (pwr_scale > 1e30)
-    pwr_scale = 1.0f; // too big
-if (pwr_scale < 1e-30)
-    pwr_scale = 0.0f; // too small (or worse, negative)
-
-_chan[i].out_pwr_scale = lin_interp(pwr_match, 1.0f, (float)pwr_scale);
-_chan[i].out_scale = sqrtf(_chan[i].out_pwr_scale);
-}
-}
 
 void ifftAndMixOut(){
   // do iFFT, then fade-in, direct copy and fade-out to output buffer
@@ -596,7 +597,7 @@ void ifftAndMixOut(){
 #endif
 
     // output data is completely fft blk
-    float x2_scale = (1.0f - _mixback) * chan.out_scale;
+    float x2_scale = (1.0f - _mixback) * _chan.out_scale;
     if (_mixback <= 0.0f)
       mixToX3(P1Src(x2, x2_scale), i);
 
@@ -610,3 +611,64 @@ void ifftAndMixOut(){
     }
   }
 }
+
+inline void DtBlkFxAudioProcessor::nextBlk()
+// internal method
+// update everything ready for the next block
+//
+{
+  // get next blk forward
+  _next_blk_fwd_n = BlkFxParam::getBlkShiftFwd(get(&GetInterp, _overlap_param), _time_fft_n);
+
+  // get the next overlap param to see if blksync is on
+
+  // synchronize next blk to start-of-beat position if beat_sync
+  float beat_sync = get(&GetInterp, _beat_sync_param) * _samps_per_beat;
+  if (beat_sync > /*arbitrary*/ 16) {
+    // next blk sample position as determined from current overlap param
+    long next_blk_samp_abs = _blk_samp_abs + _next_blk_fwd_n;
+
+    // find the sample position of the closest sync position before current next blk
+    float units = ceilf((_beat_start_abs - next_blk_samp_abs) / beat_sync);
+    long sync_abs = (long)(_beat_start_abs - units * beat_sync);
+    long sync_fwd = sync_abs - _blk_samp_abs;
+
+    // LOG("", "nextBlk, blksync" <<VAR(_next_blk_fwd_n) <<VAR(sync_fwd) <<VAR(_blk_samp_abs)
+    // <<VAR(next_blk_samp_abs)<<VAR(beats)<<VAR(sync_abs)<<VAR(overlap_param));
+    if (sync_fwd > _min_blk_fwd_samps && sync_fwd <= _next_blk_fwd_n)
+      _next_blk_fwd_n = sync_fwd;
+  }
+
+  _params_state = PARAMS_CHK_SYNC;
+  _params_need_processing = true;
+}
+// internal method
+// update everything ready for the next block
+//
+{
+  // get next blk forward
+  _next_blk_fwd_n = BlkFxParam::getBlkShiftFwd(get(&GetInterp, _overlap_param), _time_fft_n);
+
+  // get the next overlap param to see if blksync is on
+
+  // synchronize next blk to start-of-beat position if beat_sync
+  float beat_sync = get(&GetInterp, _beat_sync_param) * _samps_per_beat;
+  if (beat_sync > /*arbitrary*/ 16) {
+    // next blk sample position as determined from current overlap param
+    long next_blk_samp_abs = _blk_samp_abs + _next_blk_fwd_n;
+
+    // find the sample position of the closest sync position before current next blk
+    float units = ceilf((_beat_start_abs - next_blk_samp_abs) / beat_sync);
+    long sync_abs = (long)(_beat_start_abs - units * beat_sync);
+    long sync_fwd = sync_abs - _blk_samp_abs;
+
+    // LOG("", "nextBlk, blksync" <<VAR(_next_blk_fwd_n) <<VAR(sync_fwd) <<VAR(_blk_samp_abs)
+    // <<VAR(next_blk_samp_abs)<<VAR(beats)<<VAR(sync_abs)<<VAR(overlap_param));
+    if (sync_fwd > _min_blk_fwd_samps && sync_fwd <= _next_blk_fwd_n)
+      _next_blk_fwd_n = sync_fwd;
+  }
+
+  _params_state = PARAMS_CHK_SYNC;
+  _params_need_processing = true;
+}
+

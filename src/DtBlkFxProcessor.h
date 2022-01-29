@@ -36,11 +36,12 @@ protected:
     void prepMixOut();
     void doFFT();
     void procFFT();
-	void ifftAndMixOut();
+    void ifftAndMixOut();
     template <typename SRC> void mixToX3(SRC src, int ch);
 
     inline static long reducePlan(long plan /*start*/, long avail_samps);
     cplxf* FFTdata(int ch) { return _x1.getWritePointer(ch) + 32; }
+    void nextBlk();
 public:
     DtBlkFxAudioProcessor();
     ~DtBlkFxAudioProcessor() override;
@@ -77,6 +78,21 @@ public:
     {
         return limit_range(
         _freq_fft_n * BlkFxParam::getHz(param) / getSampleRate(), 0.0f, _freq_fft_n * 0.5f);
+    }
+
+    // get morphed values using vst params (if need be)
+    int /*elements copied*/ get(ParamsDelayGetFn get_fn, const MorphParam*
+            morph, Rng<float> result, int param_idx = 0)
+    {
+        return morph->get((*get_fn)(_params), result, param_idx);
+    }
+
+    // get single morphed param value using vst param (if need be)
+    float get(ParamsDelayGetFn get_fn, const MorphParam* morph, int param_idx = 0)
+    {
+        Array<float, 1> result;
+        get(get_fn, morph, result, param_idx);
+        return result[0];
     }
 
 private:
