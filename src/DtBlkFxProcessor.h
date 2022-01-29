@@ -232,8 +232,28 @@ public:
     float _mixback;
     Array<FxState1_0, BlkFxParam::NUM_FX_SETS> _fx1_0;
 public:
-  // contiguous space for chunk data & presets when saving
-  std::valarray<unsigned char> _chunk_data;
+    // contiguous space for chunk data & presets when saving
+    std::valarray<unsigned char> _chunk_data;
+
+public: // polled variables that are updated periodically
+    // samples per beat
+    float _samps_per_beat;
+
+    // most recent start of beat sample position
+    long _beat_start_abs;
+
+    // last sample position bpm was polled
+    long _prev_poll_abs;
+
+    // number of samples before we do the poll
+    long _samps_per_poll;
+
+    // minimum number of samples that we move forward to get the next block
+    long _min_blk_fwd_samps;
+
+    // check whether enough samples have elapsed to update polled variables
+    void pollUpdate(bool force);
+
 };
 
 inline /*static*/ long DtBlkFxAudioProcessor::reducePlan(long plan /*start*/, long avail_samps)

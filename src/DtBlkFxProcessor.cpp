@@ -642,33 +642,44 @@ inline void DtBlkFxAudioProcessor::nextBlk()
   _params_state = PARAMS_CHK_SYNC;
   _params_need_processing = true;
 }
-// internal method
-// update everything ready for the next block
+
+inline void DtBlkFxAudioProcessor::pollUpdate(bool force)
+// internal method, called regularly from process methods
+//
+// update polled variables from vst host (to do with tempo)
 //
 {
-  // get next blk forward
-  _next_blk_fwd_n = BlkFxParam::getBlkShiftFwd(get(&GetInterp, _overlap_param), _time_fft_n);
+  if (!force && _curr_samp_abs - _prev_poll_abs < _samps_per_poll)
+    return;
 
-  // get the next overlap param to see if blksync is on
+  // ask host for tempo
+  VstTimeInfo* ti = getTimeInfo(kVstTempoValid | kVstPpqPosValid);
+  if (ti) {
+    //((MyInfo*)ti)->dbgprint();
+    if (ti->flags & kVstTempoValid)
+      _samps_per_beat = (float)(60.0 * sampleRate / ti->tempo);
 
-  // synchronize next blk to start-of-beat position if beat_sync
-  float beat_sync = get(&GetInterp, _beat_sync_param) * _samps_per_beat;
-  if (beat_sync > /*arbitrary*/ 16) {
-    // next blk sample position as determined from current overlap param
-    long next_blk_samp_abs = _blk_samp_abs + _next_blk_fwd_n;
+    float ppq_pos = (float)ti->ppqPos;
+    float ppq_frac = ppq_pos - floorf(ppq_pos);
 
-    // find the sample position of the closest sync position before current next blk
-    float units = ceilf((_beat_start_abs - next_blk_samp_abs) / beat_sync);
-    long sync_abs = (long)(_beat_start_abs - units * beat_sync);
-    long sync_fwd = sync_abs - _blk_samp_abs;
-
-    // LOG("", "nextBlk, blksync" <<VAR(_next_blk_fwd_n) <<VAR(sync_fwd) <<VAR(_blk_samp_abs)
-    // <<VAR(next_blk_samp_abs)<<VAR(beats)<<VAR(sync_abs)<<VAR(overlap_param));
-    if (sync_fwd > _min_blk_fwd_samps && sync_fwd <= _next_blk_fwd_n)
-      _next_blk_fwd_n = sync_fwd;
+    // work out sample position of the start of the current beat
+    if (ti->flags & kVstPpqPosValid)
+      _beat_start_abs = _curr_samp_abs - (long)(ppq_frac * _samps_per_beat);
   }
 
-  _params_state = PARAMS_CHK_SYNC;
-  _params_need_processing = true;
-}
+  // calculate samples per tick (based on tempo)
+  float samps_per_tick = (1.0f / (float)BlkFxParam::TICKS_PER_BEAT) * _samps_per_beat;
 
+  // interpolate params 1/4 beat before the value changes
+  _params.setExpectedDist((long)(_samps_per_beat * .25f));
+
+  // LOG("", "pollUpdate"
+  // <<VAR(_samps_per_beat)<<VAR(ppq_pos)<<VAR(ppq_frac)<<VAR(_beat_start_abs));
+
+  // poll every beat
+  _samps_per_poll = (long)(_samps_per_beat);
+  _prev_poll_abs = _curr_samp_abs;
+
+  // min number of samps we can mv fwd to get the next blk
+  _min_blk_fwd_samps = max(64L, (long)samps_per_tick);
+}
