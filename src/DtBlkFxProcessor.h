@@ -254,6 +254,10 @@ public: // polled variables that are updated periodically
     // check whether enough samples have elapsed to update polled variables
     void pollUpdate(bool force);
 
+public:
+    // params are delayed by the same amount of time as the audio
+    ParamsDelay _params;
+
 };
 
 inline /*static*/ long DtBlkFxAudioProcessor::reducePlan(long plan /*start*/, long avail_samps)

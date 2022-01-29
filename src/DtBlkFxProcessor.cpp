@@ -653,33 +653,34 @@ inline void DtBlkFxAudioProcessor::pollUpdate(bool force)
     return;
 
   // ask host for tempo
-  VstTimeInfo* ti = getTimeInfo(kVstTempoValid | kVstPpqPosValid);
-  if (ti) {
+  //TODO: Make sure this is only called in processBlock!!!
+  juce::AudioPlayHead* ph = getPlayHead();
+  if (ph) {
     //((MyInfo*)ti)->dbgprint();
-    if (ti->flags & kVstTempoValid)
-      _samps_per_beat = (float)(60.0 * sampleRate / ti->tempo);
-
-    float ppq_pos = (float)ti->ppqPos;
-    float ppq_frac = ppq_pos - floorf(ppq_pos);
-
-    // work out sample position of the start of the current beat
-    if (ti->flags & kVstPpqPosValid)
-      _beat_start_abs = _curr_samp_abs - (long)(ppq_frac * _samps_per_beat);
+    juce::AudioPlayHead::CurrentPositionInfo cur_pos;
+    if(ph->getCurrentPosition(cur_pos))
+    {
+        _samps_per_beat =  static_cast<float>(60.f * getSampleRate() / cur_pos.bpm);
+        float ppq_pos = cur_pos.ppqPosition;
+        float ppq_frac = ppq_pos - floorf(ppq_pos);
+        // work out sample position of the start of the current beat
+        _beat_start_abs = _curr_samp_abs - static_cast<long>(ppq_frac * _samps_per_beat);
+    }
   }
 
   // calculate samples per tick (based on tempo)
-  float samps_per_tick = (1.0f / (float)BlkFxParam::TICKS_PER_BEAT) * _samps_per_beat;
+  float samps_per_tick = (1.0f / static_cast<float>(BlkFxParam::TICKS_PER_BEAT)) * _samps_per_beat;
 
   // interpolate params 1/4 beat before the value changes
-  _params.setExpectedDist((long)(_samps_per_beat * .25f));
+  _params.setExpectedDist(static_cast<long>(_samps_per_beat * .25f));
 
   // LOG("", "pollUpdate"
   // <<VAR(_samps_per_beat)<<VAR(ppq_pos)<<VAR(ppq_frac)<<VAR(_beat_start_abs));
 
   // poll every beat
-  _samps_per_poll = (long)(_samps_per_beat);
+  _samps_per_poll = static_cast<long>(_samps_per_beat);
   _prev_poll_abs = _curr_samp_abs;
 
   // min number of samps we can mv fwd to get the next blk
-  _min_blk_fwd_samps = max(64L, (long)samps_per_tick);
+  _min_blk_fwd_samps = std::max(64L, static_cast<long>(samps_per_tick));
 }
