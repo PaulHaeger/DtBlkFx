@@ -240,7 +240,7 @@ public:
 #endif
 
 //------------------------------------------------------------------------------------------
-#ifdef __ppc__
+#if defined(__ppc__) || defined(__powerpc__)
 
 // leave these alone on PPC, by default denormals are off
 #  define SCOPE_NO_FP_EXCEPTIONS_OR_DENORMALS
@@ -490,13 +490,13 @@ struct _PtrBase
 
   T* ptr;
 
-  _PtrBase() { ptr = NULL; }
+  _PtrBase() { ptr = nullptr; }
 
   // steal a pointer to transfer ownership from controlled pointers (e.g. Ref<>)
   T* Steal()
   {
     T* r = ptr;
-    ptr = NULL;
+    ptr = nullptr;
     return r;
   }
 
