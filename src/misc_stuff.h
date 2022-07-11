@@ -27,6 +27,9 @@ Free software!
 #elif  defined(__linux)
 //linux
 //TODO: LINUX ALTERNATIVE
+#include <pthread.h>
+#include <atomic>
+
 #else // assume MAC
 #  include <Accelerate/Accelerate.h>
 #  include <libkern/OSAtomic.h>
@@ -39,6 +42,7 @@ Free software!
 
 #include <memory>
 #include <string>
+#include <cstring>
 #include <valarray>
 #include <vector>
 
@@ -63,9 +67,9 @@ Free software!
 
 #ifdef _DEBUG
 
-#  ifdef _WIN32
-#    include <sstream>
-#    define ASSERTX(e, msg)                                                                        \
+    #if defined(_WIN32)
+        #include <sstream>
+        #define ASSERTX(e, msg)                                                                    \
       {                                                                                            \
         if (!(e)) {                                                                                \
           std::ostringstream _assertx_msg;                                                         \
@@ -78,23 +82,37 @@ Free software!
         }                                                                                          \
       }
 
-#  else // mac
-#    ifdef __ppc__
-#      define BRK asm { trap}
-#    else
-#      define BRK __asm { int 3}
-#    endif
-#    define ASSERTX(e, msg)                                                                        \
-      {                                                                                            \
+    #elif defined(__linux)//linux
+       //TODO: Display Error box using JuceAlertWindow or something
+       #include <cassert>
+       #include <iostream>
+       #define ASSERTX(e, msg)                                                                     \
+        {                                                                                                  \
+          if(!(e)){                                                                                    \
+              std::cerr << "ASSERTION: " __FILE__ ":" << std::dec << __LINE__ << ": " #e << "==0"      \
+                           << msg << std::endl;                                                        \
+              assert(false);                                                                           \
+          }                                                                                            \
+        }
+
+
+    #else // mac
+       #ifdef __ppc__
+        #define BRK asm { trap}
+       #else
+        #define BRK __asm { int 3}
+       #endif
+       #define ASSERTX(e, msg)                                                                        \
+       {                                                                                            \
         if (__builtin_expect(!(e), 0)) {                                                           \
           std::cerr << "ASSERTION: " __FILE__ ":" << std::dec << __LINE__ << ": " #e << "==0"      \
                     << msg << std::endl;                                                           \
           BRK                                                                                      \
         }                                                                                          \
       }
-#  endif
+    #endif
 #else
-#  define ASSERTX(e, msg)                                                                          \
+    #define ASSERTX(e, msg)                                                                          \
     {                                                                                              \
     }
 #endif
@@ -189,9 +207,42 @@ template <class T> inline bool GetProcAddress(T& result, HMODULE module, const c
   result = (T)t;
   return t ? true : false;
 }
+
 #elif defined(__linux)
+
 //Linux
 //TODO: FIND LINUX ALTERNATIVE
+inline long InterlockedIncrement(long* v){
+   return  ++(*v); //TODO
+}
+
+inline long InterlockedDecrement(long* v){
+   return --(*v); //TODO
+}
+
+//------------------------------------------------------------------------------------------
+struct CriticalSectionWrapper
+// wrap a spinlock
+{
+  pthread_spinlock_t sl;
+  CriticalSectionWrapper() { pthread_spin_init(&sl, PTHREAD_PROCESS_PRIVATE); }
+  ~CriticalSectionWrapper() {pthread_spin_lock(&sl); pthread_spin_destroy(&sl);}
+  void lock() { pthread_spin_lock(&sl); }
+  void unlock() { pthread_spin_unlock(&sl); }
+  operator pthread_spinlock_t*() { return &sl; }
+};
+
+//------------------------------------------------------------------------------------------
+class ScopeCriticalSection {
+public:
+  pthread_spinlock_t* sl;
+  ScopeCriticalSection(pthread_spinlock_t* sl_)
+  {
+    sl = sl_;
+    pthread_spin_lock(sl_);
+  }
+  ~ScopeCriticalSection() { pthread_spin_unlock(sl); }
+};
 
 #else // assume MAC OS X
 
@@ -761,7 +812,7 @@ inline void CopyAllSrc(VoidPtr dst, UCharRng src)
 // set all bytes to "value"
 inline void SetBytes(UCharRng dst, unsigned char value)
 {
-  memset(dst.ptr, value, dst.n);
+    memset(dst.ptr, value, dst.n);
 }
 
 // do a bytewise clear
