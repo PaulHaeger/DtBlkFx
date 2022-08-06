@@ -95,6 +95,8 @@ public: // override AudioEffect methods
   virtual int32_t getVendorVersion() { return 1200; }
 
   //virtual VstPlugCategory getPlugCategory() { return kPlugCategEffect; }
+    unsigned int curProgram;
+
 public: 
   // cast the editor to our gui
 //  Gui* gui() { return (Gui*)/*AudioEffect::*/ editor; }
@@ -105,8 +107,7 @@ public:
   // return the bin index from param value
   float /*bin*/ getFFTBin(float /*0..1*/ param)
   {
-    return limit_range(
-        _freq_fft_n * BlkFxParam::getHz(param) / sampleRate, 0.0f, _freq_fft_n * 0.5f);
+    return limit_range(_freq_fft_n * BlkFxParam::getHz(param) / getSampleRate(), 0.0f, _freq_fft_n * 0.5f);
   }
 
   // return fixed-position fft buffer (with offset to allow for shift overrun)
@@ -401,14 +402,14 @@ public:
 };
 
 //-------------------------------------------------------------------------------------------------
-inline long DtBlkFx::getDelaySamps(const BlkFxParam::Delay& delay)
+inline long DtBlkFxAudioProcessor::getDelaySamps(const BlkFxParam::Delay& delay)
 // internal method
 // given the vst param, return the corresponding number of samples delay (including any initial
 // delay)
 {
   float samps = delay.getAmount();
   if (delay.i_part == delay.MSEC)
-    samps *= sampleRate * 1e-3f;
+    samps *= getSampleRate() * 1e-3f;
   else
     samps *= _samps_per_beat;
 
@@ -418,7 +419,7 @@ inline long DtBlkFx::getDelaySamps(const BlkFxParam::Delay& delay)
   );
 }
 //-------------------------------------------------------------------------------------------------
-inline /*static*/ long DtBlkFx::reducePlan(long plan /*start*/, long avail_samps)
+inline /*static*/ long DtBlkFxAudioProcessor::reducePlan(long plan /*start*/, long avail_samps)
 // static method
 // given "avail_samps", return plan that corresponds to data that is at most twice the length
 //

@@ -356,7 +356,7 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::configParams1_0()
+void DtBlkFxAudioProcessor::configParams1_0()
 // configure params for 1.0 compatible operation
 //
 {

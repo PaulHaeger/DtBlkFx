@@ -29,6 +29,7 @@ Free software!
 //TODO: LINUX ALTERNATIVE
 #include <pthread.h>
 #include <atomic>
+#include <xmmintrin.h>
 
 #else // assume MAC
 #  include <Accelerate/Accelerate.h>
@@ -510,7 +511,7 @@ template <class T> T* begin(const std::valarray<T>& v)
 //------------------------------------------------------------------------------------------
 template <class T, class BASE = T>
 struct new_auto_ptr
-    : public std::auto_ptr<BASE>
+    : public std::unique_ptr<BASE>
 // wrapper for auto_ptr that is initialized with a new instance of "T"
 // i.e. instead of writing this:
 //     auto_ptr<MyClass> my_class = new MyClass;
@@ -519,16 +520,17 @@ struct new_auto_ptr
 
 {
   new_auto_ptr()
-      : std::auto_ptr<BASE>(new T)
+      : std::unique_ptr<BASE>(new T)
   {
   }
 };
 
 //------------------------------------------------------------------------------------------
 // allow an auto_ptr to be set to a ptr
-template <class A, class B> inline void set(std::auto_ptr<A>& a, B* b)
+template <class A, class B> inline void set(std::unique_ptr<A>& a, B* b)
 {
-  a = std::auto_ptr<A>(b);
+    //TODO: Check if this is correct. Originally a was reassigned with a new auto_ptr. This should be equivalent.
+    a.reset(b);
 }
 
 //------------------------------------------------------------------------------------------
@@ -984,7 +986,7 @@ struct LittleEndianMemStr
 };
 
 //-------------------------------------------------------------------------------------------------
-inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, const va_list args)
+inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, va_list args)
 //
 // wrapper for vsnprintf to print into a range & return remaining
 //
@@ -995,7 +997,7 @@ inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, const va_list args)
 
 //
 #ifdef _WIN32
-  int n = _vsnprintf_s(dst, dst.n, _TRUNCATE, fmt, const_cast<va_list>(args));
+  int n = _vsnprintf_s(dst, dst.n, _TRUNCATE, fmt, args);
 
   // check for truncation
   if (n < 0) {
@@ -1003,7 +1005,7 @@ inline Rng<char> v_rng_sprf(Rng<char> dst, const char* fmt, const va_list args)
     dst[n] = 0;
   }
 #else
-  int n = vsnprintf(dst, dst.n, fmt, const_cast<va_list>(args));
+  int n = vsnprintf(dst, dst.n, fmt, args);
 
   // check for truncation
   if (n > dst.n - 1)
@@ -1214,7 +1216,7 @@ public:
     }
 
     // zero terminate
-    base::data[min(i, LENGTH - 1)] = 0;
+    base::data[std::min(i, LENGTH - 1)] = 0;
   }
 
   // legnth of string

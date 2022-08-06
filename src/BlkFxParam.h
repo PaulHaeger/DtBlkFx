@@ -52,6 +52,8 @@ typedef enum {
   // number of ticks per beat
   TICKS_PER_BEAT = 16,
 
+# define STEREO
+//TODO: Make MONO/STEREO selection dynamic instead of precompiled
 #ifdef STEREO
   AUDIO_CHANNELS = 2
 #elif MONO

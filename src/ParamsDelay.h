@@ -133,7 +133,7 @@ public:
     _data.resize(_record_len_bytes * _length);
 
     // clr first record
-    memset(&begin(_data), 0, _record_len_bytes);
+    memset(_data.data(), 0, _record_len_bytes);
 
     // by default no values are forced
     _override_param.resize(n_params, 0.0f);
