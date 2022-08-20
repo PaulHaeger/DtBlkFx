@@ -726,7 +726,7 @@ public:
   // get that returns "out_of_bounds" if "i" out of bounds
   const T& get(int i, const T& out_of_bounds) const
   {
-    return idx_within(i, *this) ? data[i] : out_of_bounds;
+    return idx_within(i, *this) ? base::ptr[i] : out_of_bounds;
   }
 
   // cast to compatible types
