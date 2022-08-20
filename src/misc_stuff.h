@@ -3,7 +3,7 @@ Miscellaneous stuff
 
 History
   Date       Version    Programmer         Comments
-  16/2/03    1.0        Darrell Tam		Created
+  16/2/03    1.0        Darrell Tam     Created
 
 Free software!
 
@@ -648,7 +648,20 @@ public:
 };
 
 //------------------------------------------------------------------------------------------
-template <class T>
+//TODO: Refactor this circular dependency
+//Forward declare Rng
+template <typename T> class Rng;
+
+//Declare to Rng Functions
+template <typename T> inline Rng<T> toRng(Rng<T>& r);
+template <typename T> inline Rng<T> toRng(T* ptr, int n = 1);
+template <typename T> inline Rng<T> toRng(std::vector<T>& v);
+template <typename T> inline Rng<T> toRng(std::valarray<T>& v);
+template <typename T> bool withinRng(int idx, const T& rng);
+
+//Now actually define stuff
+
+template <typename T>
 class Rng
     : public _PtrBase<T>
 // range is a pointer with length
@@ -682,7 +695,9 @@ public:
 
   // attempt to construct using toRng() conversion (for some reason we need to explicitly call
   // conversion)
-  template <class T2> Rng(T2& src) { *this = toRng(src).operator Rng<T>(); }
+  template <typename T2> Rng(T2& src) {
+      *this = toRng(src).operator Rng<T>();
+  }
 
   void adjStart(int i)
   {
@@ -725,24 +740,25 @@ public:
 };
 
 // some things that we can cast to rng
-template <class T> inline Rng<T> toRng(Rng<T>& r)
+template <typename T> inline Rng<T> toRng(Rng<T>& r)
 {
   return Rng<T>(r.ptr, r.n);
 }
-template <class T> inline Rng<T> toRng(T* ptr, int n = 1)
+
+template <typename T> inline Rng<T> toRng(T* ptr, int n)
 {
   return Rng<T>(ptr, n);
 }
-template <class T> inline Rng<T> toRng(std::vector<T>& v)
+template <typename T> inline Rng<T> toRng(std::vector<T>& v)
 {
   return Rng<T>(&v[0], (int)v.size());
 }
-template <class T> inline Rng<T> toRng(std::valarray<T>& v)
+template <typename T> inline Rng<T> toRng(std::valarray<T>& v)
 {
   return Rng<T>(&v[0], (int)v.size());
 }
 // return true if the 0 <= idx < rng.size()
-template <class T> bool withinRng(int idx, const T& rng)
+template <typename T> bool withinRng(int idx, const T& rng)
 {
   return idx >= 0 && idx < toRng(const_cast<T&>(rng)).size();
 }
