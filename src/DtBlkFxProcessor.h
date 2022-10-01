@@ -68,7 +68,7 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DtBlkFxAudioProcessor)
 
 public: // override AudioEffect methods
-  virtual void process(float** inputs, float** outputs, int32_t sampleframes);
+  virtual void process(const float** inputs, float** outputs, int32_t sampleframes);
   virtual void processReplacing(float** inputs, float** outputs, int32_t sampleFrames);
   virtual void setBlockSize(int32_t samps);
 

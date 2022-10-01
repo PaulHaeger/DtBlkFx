@@ -40,7 +40,7 @@ General Public License for more details.
 //#include "gui_stuff.h"
 
 class MainGuiPanel;
-class DtBlkFx;
+class DtBlkFxAudioProcessor;
 class MorphParamEdit;
 
 //-------------------------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ class FxState1_0 //: public wxEvtHandler
 {
 public:
   // call init before use
-  void init(DtBlkFx* b, int fx_set);
+  void init(DtBlkFxAudioProcessor* b, int fx_set);
 
   bool /*true=printed*/ getParamDisplay(BlkFxParam::SplitParamNum& p, float v, Rng<char> str);
 

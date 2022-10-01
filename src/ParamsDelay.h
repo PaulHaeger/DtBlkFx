@@ -21,6 +21,9 @@ when moving functions outside because they would all need to be templated
 #include "misc_stuff.h"
 #include <vector>
 #include <cstring>
+#include <type_traits>
+
+inline int toVstParamIdx(int i);
 
 //-------------------------------------------------------------------------------------------------
 struct VstParamIdx
@@ -28,6 +31,7 @@ struct VstParamIdx
 // wrapper for vst param indexes (int) so that MorphParam can be used as an index directly
 {
   VstParamIdx() {}
+  
   template <class T> VstParamIdx(const T& t) { val = toVstParamIdx(t); }
 };
 
@@ -36,6 +40,7 @@ inline int toVstParamIdx(int i)
 {
   return i;
 }
+
 
 //-------------------------------------------------------------------------------------------------
 class ParamsDelay {
@@ -93,6 +98,7 @@ protected:
   // access a record from _data (which is just an array of bytes) & cast
   template <class T> T* data(int i, int byte_offs) const
   {
+      //TODO: Make alias safe
     return (T*)(begin(_data) + i * _record_len_bytes + byte_offs);
   }
 

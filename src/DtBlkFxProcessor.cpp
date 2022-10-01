@@ -26,13 +26,14 @@
 #include <cstdint>
 #include <string.h>
 
-#include "WrapProcessFloatVec.h"
+#include "wrapprocessfloatvec.h"
 
 //#include "Gui.h"
 #include "rfftw_float.h"
 
 // filled by BlkFxMain.cpp
-extern vector<VstProgram<BlkFxParam::TOTAL_NUM>> g_blk_fx_presets;
+//TODO: This will probabably need to be differently done in the JUCE Port
+extern std::vector<VstProgram<BlkFxParam::TOTAL_NUM>> g_blk_fx_presets;
 
 //#define WR_PARAM
 #ifdef WR_PARAM
@@ -147,13 +148,13 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   _max_delay_n = _x3_sz - MAX_FFT_SZ - 2048;
 
   // copy presets into the program
-  _program.reserve(/*AudioEffect::*/ numPrograms);
+  _program.reserve(/*AudioEffect::*/ getNumPrograms());
   _program = g_blk_fx_presets;
   _program.push_back(BlkFxProgram("> reset current <:0.0 0.062745098 0.1098039 0.35"));
 
-  //
-  setNumInputs(AUDIO_CHANNELS);
-  setNumOutputs(AUDIO_CHANNELS);
+  //TODO: Is setting input/output channel count necessary in JUCE
+  //setNumInputs(AUDIO_CHANNELS);
+  //setNumOutputs(AUDIO_CHANNELS);
 
   // hasVu ();                  // who knows what this is meant to do?
   // hasClip(false);            // we don't clip (is that what this is all about?)
@@ -426,7 +427,7 @@ void DtBlkFxAudioProcessor::configParams1_0()
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::init()
+void DtBlkFxAudioProcessor::init()
 // clear out all buffers
 {
   unsigned i;
@@ -480,10 +481,10 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
 
   // get enough space to copy current data and all presets
   int payload_bytes =
-      PackedBytesPerVstProgram(BlkFxParam::TOTAL_NUM) * (num_programs + 1 /*curr params*/);
-  //_chunk_data.resize(/*tag field*/ 4 + /*vers field*/ 4 + /*n programs field*/ 4 +
-                     ///*curr program field*/ 4 + payload_bytes);
-                     /*
+      PackedBytesPerVstProgram(BlkFxParam::TOTAL_NUM) * (num_programs + 1 / *curr params* /);
+  //_chunk_data.resize(/ *tag field* / 4 + / *vers field* / 4 + / *n programs field* / 4 +
+                     /// *curr program field* / 4 + payload_bytes);
+                     / *
 
   // cast to what we need
   LittleEndianMemStr le_data(_chunk_data);
@@ -520,9 +521,9 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
 }
 
 //-------------------------------------------------------------------------------------------------
-//int32_t /*1=success*/// DtBlkFxProcessor::setChunk(void* vdata, int32_t n_bytes, bool isPreset)
+//int32_t / *1=success* /// DtBlkFxProcessor::setChunk(void* vdata, int32_t n_bytes, bool isPreset)
 // virtual, override AudioEffect
-/*
+/ *
 {
   LittleEndianMemStr le_data(vdata, n_bytes);
 
@@ -542,8 +543,8 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
       return 0;
 
     // attempt to recall everything, write 0's if we run out of params in the data
-    for (int i = 0; i < /*num params*/// 4 + 5 * 4; i++) {
-                                     /*
+    for (int i = 0; i < / *num params* /// 4 + 5 * 4; i++) {
+                                     / *
       float param = 0.0f;
       le_data.get32(&param);
       setParameter(i, param);
@@ -607,8 +608,8 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
       else
         // current program number is stored as the name of the "curr" params
         // I did it like this because I forgot to add a specific field for this in a prerelease
-        AudioEffect::curProgram = strtol(curr.getName(), /*end ptr*/// NULL, /*base*/ 10);
-/*
+        AudioEffect::curProgram = strtol(curr.getName(), / *end ptr* /// NULL, / *base* / 10);
+/ *
       curProgram = currProgramNum(); // limit range
       LOG("", "DtBlkFxProcessor::setChunk v1.0" << VAR(curProgram));
 
@@ -1042,7 +1043,7 @@ bool DtBlkFxProcessor::getVendorString(char* text)
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::copyInBuf(float** in_buf_, long buf_n)
+inline void DtBlkFxProcessor::copyInBuf(const float** in_buf_, long buf_n)
 // internal method
 // copy input data into the pre-fft buffer
 // note that we are allowed to copy data beyond the end of our normal wrap position. The x0 buffer
@@ -1735,7 +1736,7 @@ inline void DtBlkFxProcessor::zeroFillOutput()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::_process(float** in_buf, long buf_n)
+inline void DtBlkFxProcessor::_process(const float** in_buf, long buf_n)
 // internal method
 {
   ScopeCriticalSection scs(_protect);
@@ -1810,7 +1811,7 @@ inline void DtBlkFxProcessor::_process(float** in_buf, long buf_n)
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::process(float** inputs, float** outputs, int32_t samps)
+void DtBlkFxProcessor::process(const float** inputs, float** outputs, int32_t samps)
 // virtual, override AudioEffect
 // called by vst-host to process data from "inputs" and add to "outputs"
 {
