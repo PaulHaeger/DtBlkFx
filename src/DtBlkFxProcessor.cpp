@@ -704,12 +704,14 @@ void DtBlkFxAudioProcessor::suspend()
 void DtBlkFxAudioProcessor::setBlockSize(int32_t sz)
 // virtual, override AudioEffect
 // called by vst-host to indicate max number of samples that will be passed to process
+//NOTE: Seems unused in juce
 {
-  AudioEffectX::setBlockSize(sz);
+// AudioEffectX::setBlockSize(sz);
   _max_delay_n = _x3_sz - MAX_FFT_SZ - sz;
 }
 
-struct MyInfo : public VstTimeInfo {
+//TODO: Useful in juce?
+/*struct MyInfo : public VstTimeInfo {
   void dbgprint()
   {
     LOG("",
@@ -718,7 +720,7 @@ struct MyInfo : public VstTimeInfo {
                       << VAR(timeSigNumerator) << VAR(timeSigDenominator) << VAR(smpteOffset)
                       << VAR(smpteFrameRate) << VAR(samplesToNextClock) << VAR(flags));
   }
-};
+};*/
 //-------------------------------------------------------------------------------------------------
 void DtBlkFxAudioProcessor::guessFFTLen(int& /*return*/ freq_fft_n, int& /*return*/ time_fft_n)
 //
@@ -760,7 +762,7 @@ float /*hz*/ DtBlkFxAudioProcessor::guessRoundHz(float freq_hz, float bin_adjust
   int fft_n, time_n;
   guessFFTLen(/*return*/ fft_n, /*return*/ time_n);
 
-  float hz_per_bin = sampleRate / fft_n;
+  float hz_per_bin = getSampleRate() / fft_n;
   float bin = limit_range(freq_hz / hz_per_bin, 0.0f, fft_n / 2.0f);
   float r = (floorf(bin + 0.5f) + bin_adjust_frac) * hz_per_bin;
   return neg ? -r : r;
@@ -864,7 +866,8 @@ void DtBlkFxAudioProcessor::getParameterName(int32_t index, char* label)
 // virtual, override AudioEffect
 // called by vst-host to get name of param
 {
-  CharRng str(label, kVstMaxParamStrLen);
+  //CharRng str(label, kVstMaxParamStrLen);
+  CharRng str(label, 64);
   using namespace BlkFxParam;
 
   // first 10 params params can be used as morph
@@ -911,7 +914,8 @@ void DtBlkFxAudioProcessor::getParameterLabel(int32_t index, char* label)
 // virtual, override AudioEffect
 // called by vst-host to get param label
 {
-  CharRng str(label, kVstMaxParamStrLen);
+  //CharRng str(label, kVstMaxParamStrLen);
+  CharRng str(label, 64);
   str << "";
 }
 
@@ -1013,7 +1017,8 @@ bool DtBlkFxAudioProcessor::getEffectName(char* name)
 {
   LOG("", "DtBlkFxProcessor::getEffectName");
 
-  CharRng(name, kVstMaxEffectNameLen) << "DTBlkFx"
+  //CharRng(name, kVstMaxEffectNameLen)
+  CharRng(name, 32) << "DTBlkFx"
 #ifdef STEREO
                                          "S"
 #endif
@@ -1030,7 +1035,8 @@ bool DtBlkFxAudioProcessor::getProductString(char* text)
 // called by vst-host to get product string
 {
   LOG("", "DtBlkFxProcessor::getProductString");
-  CharRng(text, kVstMaxEffectNameLen) << "DTBlkFx"
+  //CharRng(text, kVstMaxEffectNameLen) << "DTBlkFx"
+  CharRng(text, 32) << "DTBlkFx"
 #ifdef STEREO
                                          "S"
 #endif
@@ -1047,7 +1053,8 @@ bool DtBlkFxAudioProcessor::getVendorString(char* text)
 // called by vst-host to get vendor string
 {
   LOG("", "DtBlkFxProcessor::getVendorString");
-  CharRng(text, kVstMaxVendorStrLen) << "darrell";
+  //CharRng(text, kVstMaxVendorStrLen) << "darrell";
+  CharRng(text, 32) << "darrell";
   return true;
 }
 
