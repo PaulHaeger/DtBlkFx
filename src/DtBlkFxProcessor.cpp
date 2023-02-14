@@ -169,7 +169,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   // didn't work in fl studio or renoise for delay of 4096
   // TODO: Is this still true?
   _initial_delay = 0;
-  setInitialDelay(_initial_delay);
+  setLatencySamples(_initial_delay);
 
   // these were registered from steinberg
   // NOTE
@@ -346,6 +346,10 @@ void DtBlkFxAudioProcessor::setStateInformation(const void* data, int sizeInByte
   // You should use this method to restore your parameters from this memory block,
   // whose contents will have been created by the getStateInformation() call.
   juce::ignoreUnused(data, sizeInBytes);
+}
+
+void DtBlkFxAudioProcessor::reset() {
+    suspend();
 }
 
 // This creates new instances of the plugin..
@@ -626,15 +630,15 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
 ***/
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::setProgram(int32_t num)
+void DtBlkFxAudioProcessor::setProgram(int32_t num)
 // virtual, override AudioEffect
 // called by vst-host to set a program
 {
   LOG("", "DtBlkFxProcessor::setProgram" << VAR(num));
 
   // normal case
-  if (num < (int)_program.size() - 1)
-    AudioEffect::setProgram(num);
+  if (num < static_cast<int32_t>(_program.size()) - 1)
+    juce::AudioProcessor::setCurrentProgram(num);
   else {
     // check for the special "reset current program"
     // reset current program to defaults
@@ -648,37 +652,40 @@ void DtBlkFxProcessor::setProgram(int32_t num)
 }
 
 //-------------------------------------------------------------------------------------------------
-bool DtBlkFxProcessor::getProgramNameIndexed(int32_t category, int32_t index, char* text)
+bool DtBlkFxAudioProcessor::getProgramNameIndexed(int32_t category, int32_t index, char* text)
 // virtual, override AudioEffect
 // called by vst-host to get the name of a program by category
 {
   LOG("", "DtBlkFxProcessor::getProgramNameIndexed" << VAR(category) << VAR(index) << VAR(_program.size()));
-  if (index < 0 || index >= (int)_program.size())
+  if (index < 0 || index >= static_cast<int>(_program.size())){
     return false;
+  }
   strcpy(text, _program[index].name);
   return true;
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::resume()
+void DtBlkFxAudioProcessor::resume()
 // virtual, override AudioEffect
 // called by vst-host to get ready to start processing
 {
   LOG("", "DtBlkFxProcessor::resume");
-  AudioEffectX::resume();
+  //NOTE: There doesnt seem to be a juce equivalent...
+  //AudioEffectX::resume();
 
-  ScopeCriticalSection scs(_protect);
-  if (gui())
-    gui()->resume();
+  //ScopeCriticalSection scs(_protect);
+  //TODO: GUI Connection
+  //if (gui())
+  //    gui()->resume();
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::suspend()
+void DtBlkFxAudioProcessor::suspend()
 // virtual, override AudioEffect
 // called by vst-host when sound is stopping
+//NOTE: Seems to be reset() in JUCE
 {
   LOG("", "DtBlkFxProcessor::suspend");
-  AudioEffectX::suspend();
 
   ScopeCriticalSection scs(_protect);
 
@@ -688,12 +695,13 @@ void DtBlkFxProcessor::suspend()
   // clear buffers
   init();
 
-  if (gui())
-    gui()->suspend();
+  //TODO: GUI Connection
+  //if (gui())
+  //  gui()->suspend();
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::setBlockSize(int32_t sz)
+void DtBlkFxAudioProcessor::setBlockSize(int32_t sz)
 // virtual, override AudioEffect
 // called by vst-host to indicate max number of samples that will be passed to process
 {
@@ -712,7 +720,7 @@ struct MyInfo : public VstTimeInfo {
   }
 };
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::guessFFTLen(int& /*return*/ freq_fft_n, int& /*return*/ time_fft_n)
+void DtBlkFxAudioProcessor::guessFFTLen(int& /*return*/ freq_fft_n, int& /*return*/ time_fft_n)
 //
 // guess the FFT length that will be used from the most recently buffered params for display
 // params - this may not match the actual length that will be used: input buffer might be full
@@ -741,7 +749,7 @@ void DtBlkFxProcessor::guessFFTLen(int& /*return*/ freq_fft_n, int& /*return*/ t
 }
 
 //-------------------------------------------------------------------------------------------------
-float /*hz*/ DtBlkFxProcessor::guessRoundHz(float freq_hz, float bin_adjust_frac)
+float /*hz*/ DtBlkFxAudioProcessor::guessRoundHz(float freq_hz, float bin_adjust_frac)
 // given a freq, round using the guessed FFT len
 {
   bool neg = false;
@@ -759,7 +767,7 @@ float /*hz*/ DtBlkFxProcessor::guessRoundHz(float freq_hz, float bin_adjust_frac
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::pollUpdate(bool force)
+inline void DtBlkFxAudioProcessor::pollUpdate(bool force)
 // internal method, called regularly from process methods
 //
 // update polled variables from vst host (to do with tempo)
@@ -773,35 +781,35 @@ inline void DtBlkFxProcessor::pollUpdate(bool force)
   if (ti) {
     //((MyInfo*)ti)->dbgprint();
     if (ti->flags & kVstTempoValid)
-      _samps_per_beat = (float)(60.0 * sampleRate / ti->tempo);
+      _samps_per_beat = static_cast<float>(60.0 * getSampleRate() / ti->tempo);
 
-    float ppq_pos = (float)ti->ppqPos;
+    float ppq_pos = static_cast<float>(ti->ppqPos);
     float ppq_frac = ppq_pos - floorf(ppq_pos);
 
     // work out sample position of the start of the current beat
     if (ti->flags & kVstPpqPosValid)
-      _beat_start_abs = _curr_samp_abs - (long)(ppq_frac * _samps_per_beat);
+      _beat_start_abs = _curr_samp_abs - static_cast<long>(ppq_frac * _samps_per_beat);
   }
 
   // calculate samples per tick (based on tempo)
-  float samps_per_tick = (1.0f / (float)BlkFxParam::TICKS_PER_BEAT) * _samps_per_beat;
+  float samps_per_tick = (1.0f / BlkFxParam::TICKS_PER_BEAT) * _samps_per_beat;
 
   // interpolate params 1/4 beat before the value changes
-  _params.setExpectedDist((long)(_samps_per_beat * .25f));
+  _params.setExpectedDist(static_cast<long>(_samps_per_beat * .25f));
 
   // LOG("", "pollUpdate"
   // <<VAR(_samps_per_beat)<<VAR(ppq_pos)<<VAR(ppq_frac)<<VAR(_beat_start_abs));
 
   // poll every beat
-  _samps_per_poll = (long)(_samps_per_beat);
+  _samps_per_poll = static_cast<long>(_samps_per_beat);
   _prev_poll_abs = _curr_samp_abs;
 
   // min number of samps we can mv fwd to get the next blk
-  _min_blk_fwd_samps = max(64L, (long)samps_per_tick);
+  _min_blk_fwd_samps = max(64L, static_cast<long>(samps_per_tick));
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::setParameter(int32_t index, float value)
+void DtBlkFxAudioProcessor::setParameter(int32_t index, float value)
 // virtual, override AudioEffect
 // called by vst-host to set param
 {
@@ -834,12 +842,13 @@ void DtBlkFxProcessor::setParameter(int32_t index, float value)
       _params_need_processing = true;
   }
 
-  if (gui())
-    gui()->setParameter(index, value);
+  //TODO: GUI Connection
+  //if(gui())
+  // gui()->setParameter(index, value);
 }
 
 //-------------------------------------------------------------------------------------------------
-float DtBlkFxProcessor::getParameter(int32_t index)
+float DtBlkFxAudioProcessor::getParameter(int32_t index)
 // virtual, override AudioEffect
 // called by vst-host to get param value
 {
@@ -851,7 +860,7 @@ float DtBlkFxProcessor::getParameter(int32_t index)
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::getParameterName(int32_t index, char* label)
+void DtBlkFxAudioProcessor::getParameterName(int32_t index, char* label)
 // virtual, override AudioEffect
 // called by vst-host to get name of param
 {
@@ -898,7 +907,7 @@ void DtBlkFxProcessor::getParameterName(int32_t index, char* label)
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::getParameterLabel(int32_t index, char* label)
+void DtBlkFxAudioProcessor::getParameterLabel(int32_t index, char* label)
 // virtual, override AudioEffect
 // called by vst-host to get param label
 {
@@ -907,7 +916,7 @@ void DtBlkFxProcessor::getParameterLabel(int32_t index, char* label)
 }
 
 //-------------------------------------------------------------------------------------------------
-bool /*true=printed*/ DtBlkFxProcessor::getParamDisplayGlobal(BlkFxParam::SplitParamNum& p, float v,
+bool /*true=printed*/ DtBlkFxAudioProcessor::getParamDisplayGlobal(BlkFxParam::SplitParamNum& p, float v,
                                                      CharRng text)
 {
   using namespace BlkFxParam;
@@ -947,7 +956,7 @@ bool /*true=printed*/ DtBlkFxProcessor::getParamDisplayGlobal(BlkFxParam::SplitP
       guessFFTLen(/*return*/ fft_len, /*return*/ time_len);
 
       // determine blk size in seconds
-      float sec = fft_len / sampleRate;
+      float sec = fft_len / getSampleRate();
 
       // print blk size in seconds or msec
       text << sprnum(sec) << "sec";
@@ -977,7 +986,7 @@ bool /*true=printed*/ DtBlkFxProcessor::getParamDisplayGlobal(BlkFxParam::SplitP
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::getParameterDisplay(int32_t index, char* text)
+void DtBlkFxAudioProcessor::getParameterDisplay(int32_t index, char* text)
 // virtual, override AudioEffect
 // called by vst-host to convert a param to text
 {
@@ -998,7 +1007,7 @@ void DtBlkFxProcessor::getParameterDisplay(int32_t index, char* text)
 }
 
 //-------------------------------------------------------------------------------------------------
-bool DtBlkFxProcessor::getEffectName(char* name)
+bool DtBlkFxAudioProcessor::getEffectName(char* name)
 // virtual, override AudioEffect
 // called by vst-host to return name of effect
 {
@@ -1016,7 +1025,7 @@ bool DtBlkFxProcessor::getEffectName(char* name)
 }
 
 //-------------------------------------------------------------------------------------------------
-bool DtBlkFxProcessor::getProductString(char* text)
+bool DtBlkFxAudioProcessor::getProductString(char* text)
 // virtual, override AudioEffect
 // called by vst-host to get product string
 {
@@ -1033,7 +1042,7 @@ bool DtBlkFxProcessor::getProductString(char* text)
 }
 
 //-------------------------------------------------------------------------------------------------
-bool DtBlkFxProcessor::getVendorString(char* text)
+bool DtBlkFxAudioProcessor::getVendorString(char* text)
 // virtual, override AudioEffect
 // called by vst-host to get vendor string
 {
@@ -1043,7 +1052,7 @@ bool DtBlkFxProcessor::getVendorString(char* text)
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::copyInBuf(const float** in_buf_, long buf_n)
+inline void DtBlkFxAudioProcessor::copyInBuf(const float** in_buf_, long buf_n)
 // internal method
 // copy input data into the pre-fft buffer
 // note that we are allowed to copy data beyond the end of our normal wrap position. The x0 buffer
@@ -1092,7 +1101,7 @@ inline void DtBlkFxProcessor::copyInBuf(const float** in_buf_, long buf_n)
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::paramsChkSync()
+inline void DtBlkFxAudioProcessor::paramsChkSync()
 // internal method
 //
 // check params for "next_blk_fwd_n" samples from _blk_samp_abs to see whether we need to sync to
@@ -1136,7 +1145,7 @@ inline void DtBlkFxProcessor::paramsChkSync()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::paramsChk()
+inline void DtBlkFxAudioProcessor::paramsChk()
 // internal method
 //
 // check whether params need processing & update variables used in processing loop
@@ -1183,7 +1192,7 @@ inline void DtBlkFxProcessor::paramsChk()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::findBlkInPos()
+inline void DtBlkFxAudioProcessor::findBlkInPos()
 // internal method
 // prepare input blk
 // variables update: _x0_i, _x0_n, _blk_samp_abs, _data_pre_x0_n, _time_fft_n, _freq_fft_n,
@@ -1233,7 +1242,7 @@ inline void DtBlkFxProcessor::findBlkInPos()
   }
 }
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::doFFT()
+inline void DtBlkFxAudioProcessor::doFFT()
 // internal method
 //
 // perform windowing on shoulder (if need be) and FFT on all channels
@@ -1335,7 +1344,7 @@ inline void DtBlkFxProcessor::doFFT()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::prepMixOut()
+inline void DtBlkFxAudioProcessor::prepMixOut()
 // internal method
 //
 // Prepare to mix blk to output by finding the number of samples that the current blk overlaps
@@ -1423,7 +1432,7 @@ inline void DtBlkFxProcessor::prepMixOut()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::procFFT()
+inline void DtBlkFxAudioProcessor::procFFT()
 // internal method
 // process the FFT'd data (x1) using the fx_params
 {
@@ -1460,7 +1469,7 @@ _chan[i].out_scale = sqrtf(_chan[i].out_pwr_scale);
 }
 
 //-------------------------------------------------------------------------------------------------
-template <class SRC> inline void DtBlkFxProcessor::mixToX3(SRC src, int ch)
+template <class SRC> inline void DtBlkFxAudioProcessor::mixToX3(SRC src, int ch)
 // internal method
 //
 {
@@ -1624,7 +1633,7 @@ void LineMix(float* data_0,   // in data array
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::ifftAndMixOut()
+inline void DtBlkFxAudioProcessor::ifftAndMixOut()
 // internal method
 // perform ifft & mix to output
 {
@@ -1666,7 +1675,7 @@ inline void DtBlkFxProcessor::ifftAndMixOut()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::nextBlk()
+inline void DtBlkFxAudioProcessor::nextBlk()
 // internal method
 // update everything ready for the next block
 //
@@ -1698,7 +1707,7 @@ inline void DtBlkFxProcessor::nextBlk()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::zeroFillOutput()
+inline void DtBlkFxAudioProcessor::zeroFillOutput()
 // zero fill x3 if it has no data to output for this blk - this will happen before the first
 // fft blk has been processed (although x3 will already be cleared) or if the delay is
 // increased in some cases
@@ -1736,7 +1745,7 @@ inline void DtBlkFxProcessor::zeroFillOutput()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxProcessor::_process(const float** in_buf, long buf_n)
+inline void DtBlkFxAudioProcessor::_process(const float** in_buf, long buf_n)
 // internal method
 {
   ScopeCriticalSection scs(_protect);
@@ -1783,13 +1792,15 @@ inline void DtBlkFxProcessor::_process(const float** in_buf, long buf_n)
     else {
       // normal case, we need to do the FFTs
       doFFT();
-      if (gui())
-        gui()->FFTDataRdy(0 /*input*/);
+      //TODO: GUI Connection
+      //if (gui())
+      //  gui()->FFTDataRdy(0 /*input*/);
       prepMixOut();
 
       procFFT();
-      if (gui())
-        gui()->FFTDataRdy(1 /*output*/);
+      //TODO: GUI Connection
+      //if (gui())
+      //  gui()->FFTDataRdy(1 /*output*/);
       ifftAndMixOut();
     }
     nextBlk();
@@ -1811,7 +1822,7 @@ inline void DtBlkFxProcessor::_process(const float** in_buf, long buf_n)
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::process(const float** inputs, float** outputs, int32_t samps)
+void DtBlkFxAudioProcessor::process(const float** inputs, float** outputs, int32_t samps)
 // virtual, override AudioEffect
 // called by vst-host to process data from "inputs" and add to "outputs"
 {
@@ -1826,7 +1837,7 @@ void DtBlkFxProcessor::process(const float** inputs, float** outputs, int32_t sa
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxProcessor::processReplacing(float** inputs, float** outputs, int32_t samps)
+void DtBlkFxAudioProcessor::processReplacing(const float** inputs, float** outputs, int32_t samps)
 // virtual, override AudioEffect
 // called by vst-host to process data from "inputs" and replace data in "outputs"
 {
