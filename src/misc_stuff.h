@@ -123,11 +123,11 @@ typedef unsigned long uint32;
 //------------------------------------------------------------------------------------------
 inline int RndToInt(float v)
 {
-  return (int)floorf(v + 0.5f);
+  return static_cast<int>(floorf(v + 0.5f));
 }
 inline int RndToInt(double v)
 {
-  return (int)floor(v + 0.5);
+  return static_cast<int>(floor(v + 0.5));
 }
 template <class T> inline T Rnd(float v)
 {
@@ -303,6 +303,7 @@ struct ScopeNoFpExceptionsOrDenormals {
 
   ScopeNoFpExceptionsOrDenormals()
   {
+      //TODO: Signedness
     prv_csr = _mm_getcsr();
 
     int new_csr = prv_csr;
@@ -469,7 +470,7 @@ inline A limit_range(const A& in, const B& range_min, const C& range_max)
 //------------------------------------------------------------------------------------------
 template <class T> inline bool idx_within(int idx, const T& t)
 {
-  return within(idx, 0, (int)t.size() - 1);
+  return within(idx, 0, static_cast<int>(t.size()) - 1);
 }
 
 //------------------------------------------------------------------------------------------
@@ -494,7 +495,7 @@ template <class I, class X> inline I wrap(I i, const X& x)
 inline long prbs32(long x)
 {
   // maximal length, taps 32 31 29 1, from wikipedia
-  return ((unsigned long)x >> 1) ^ (-(x & 1) & 0xd0000001UL);
+  return (static_cast<unsigned long>(x) >> 1) ^ (-(x & 1) & 0xd0000001UL);
 }
 
 //------------------------------------------------------------------------------------------

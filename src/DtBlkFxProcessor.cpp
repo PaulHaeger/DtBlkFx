@@ -779,18 +779,22 @@ inline void DtBlkFxAudioProcessor::pollUpdate(bool force)
     return;
 
   // ask host for tempo
-  VstTimeInfo* ti = getTimeInfo(kVstTempoValid | kVstPpqPosValid);
-  if (ti) {
-    //((MyInfo*)ti)->dbgprint();
-    if (ti->flags & kVstTempoValid)
-      _samps_per_beat = static_cast<float>(60.0 * getSampleRate() / ti->tempo);
+  //TODO: MAKE SURE THIS ONLY USED IN THE PROCESS BLOCK METHOD CONTEXT
+  const juce::AudioPlayHead* playhead = getPlayHead();
+  auto pi = playhead->getPosition();
 
-    float ppq_pos = static_cast<float>(ti->ppqPos);
-    float ppq_frac = ppq_pos - floorf(ppq_pos);
+  if (pi.hasValue()) {
+      if(pi->getBpm().hasValue()){
+        _samps_per_beat = static_cast<float>(60.f * getSampleRate() / *(pi->getBpm()));
+      }
+
+      if(pi->getPpqPosition().hasValue()){
+          float ppq_pos = static_cast<float>(*(pi->getPpqPosition()));
+          float ppq_frac = ppq_pos - floorf(ppq_pos);
 
     // work out sample position of the start of the current beat
-    if (ti->flags & kVstPpqPosValid)
-      _beat_start_abs = _curr_samp_abs - static_cast<long>(ppq_frac * _samps_per_beat);
+          _beat_start_abs = _curr_samp_abs - static_cast<long>(ppq_frac * _samps_per_beat);
+        }
   }
 
   // calculate samples per tick (based on tempo)

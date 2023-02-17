@@ -28,7 +28,7 @@ CharRng RngPrintNumStruct::print(Rng<char> dst) const
   };
 
   float abs_v = fabsf(v);
-  int i = 0;
+  size_t i = 0;
   while (i < NUM_ELEMENTS(stuff) - 1) {
     if (stuff[i].max_val >= max_unit)
       break;
@@ -51,5 +51,5 @@ CharRng operator<<(CharRng dst, PercentStruct s)
                        "%2.7f%%",
                        "%2.8f%%",
                        "%2.9f%%"};
-  return dst << sprf(GET_ELEMENT(fmt, s.decimal_places, "%2.9f%%"), s.frac * 100.0f);
+  return dst << sprf(GET_ELEMENT(fmt, static_cast<size_t>(s.decimal_places), "%2.9f%%"), s.frac * 100.0f);
 }
