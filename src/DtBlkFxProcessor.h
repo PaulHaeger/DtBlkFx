@@ -69,7 +69,7 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DtBlkFxAudioProcessor)
 
 public: // override AudioEffect methods
-  virtual void process(const float** inputs, float** outputs, int32_t sampleframes);
+  virtual void process(const float* const* inputs, float* const* outputs, int32_t sampleframes);
   virtual void processReplacing(const float** inputs, float** outputs, int32_t sampleFrames);
   virtual void setBlockSize(int32_t samps);
 
@@ -164,7 +164,7 @@ protected: // internal methods
   void configParams1_0();
   void init();
 
-  void copyInBuf(const float** in_buf_, long buf_n);
+  void copyInBuf(const float* const* in_buf_, long buf_n);
   void paramsChkSync();
   void paramsChk();
   void findBlkInPos();
@@ -176,7 +176,7 @@ protected: // internal methods
   void nextBlk();
   void zeroFillOutput();
 
-  void _process(const float** in_buf, long buf_n);
+  void _process(const float* const* in_buf, long buf_n);
 
 public: //
   // critical section is used to protect against gui & audio processing thread

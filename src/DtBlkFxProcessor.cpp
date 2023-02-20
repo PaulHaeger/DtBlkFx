@@ -1063,7 +1063,7 @@ bool DtBlkFxAudioProcessor::getVendorString(char* text)
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxAudioProcessor::copyInBuf(const float** in_buf_, long buf_n)
+inline void DtBlkFxAudioProcessor::copyInBuf(const float* const* in_buf_, long buf_n)
 // internal method
 // copy input data into the pre-fft buffer
 // note that we are allowed to copy data beyond the end of our normal wrap position. The x0 buffer
@@ -1756,7 +1756,7 @@ inline void DtBlkFxAudioProcessor::zeroFillOutput()
 }
 
 //-------------------------------------------------------------------------------------------------
-inline void DtBlkFxAudioProcessor::_process(const float** in_buf, long buf_n)
+inline void DtBlkFxAudioProcessor::_process(const float* const* in_buf, long buf_n)
 // internal method
 {
   ScopeCriticalSection scs(_protect);
@@ -1833,7 +1833,7 @@ inline void DtBlkFxAudioProcessor::_process(const float** in_buf, long buf_n)
 }
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxAudioProcessor::process(const float** inputs, float** outputs, int32_t samps)
+void DtBlkFxAudioProcessor::process(const float* const* inputs, float* const* outputs, int32_t samps)
 // virtual, override AudioEffect
 // called by vst-host to process data from "inputs" and add to "outputs"
 {
