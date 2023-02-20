@@ -77,6 +77,13 @@ find_package(FFTW3 CONFIG REQUIRED)
 target_sources(DtBlkFx PRIVATE
     src/DtBlkFxEditor.cpp
     src/DtBlkFxProcessor.cpp
+    src/FxRun1_0.cpp
+    src/FxState1_0.cpp
+    src/fft_frac_shift.cpp
+    src/fftw_support.cpp
+    src/misc_stuff.cpp
+    src/NoteFreq.cpp
+    src/rfftw_float.cpp
 )
 
 # `target_compile_definitions` adds some preprocessor definitions to our target. In a Projucer
