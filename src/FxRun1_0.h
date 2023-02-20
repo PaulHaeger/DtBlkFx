@@ -31,7 +31,7 @@ General Public License for more details.
 #include <string.h>
 #include <vector>
 
-class DtBlkFx;
+class DtBlkFxAudioProcessor;
 class FxState1_0;
 
 // number of 1.0 effects
@@ -96,7 +96,7 @@ public: // methods for the GUI
   //
   virtual float getValue(int idx, float curr_val)
   {
-    return idx >= (int)_value_presets.size() ? curr_val : _value_presets[idx].val;
+    return idx >= static_cast<int>(_value_presets.size()) ? curr_val : _value_presets[idx].val;
   }
 
 public: // internal stuff to do with value presets

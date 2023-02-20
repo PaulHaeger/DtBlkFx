@@ -444,18 +444,18 @@ public:
         return;
       }
 
-      float shift_stp_inv = -1.0f / (float)shift_stp;
+      float shift_stp_inv = -1.0f / static_cast<float>(shift_stp);
 
       if (dst_first_bin < 0) {
         // out of bounds on the left
-        int offs = (int)ceilf(shift_stp_inv * (float)dst_first_bin);
+        int offs = static_cast<int>(ceilf(shift_stp_inv * static_cast<float>(dst_first_bin)));
         dst_first_bin += offs * shift_stp;
         procSrcOnly(src_first_bin, src_first_bin + offs - 1);
         src_first_bin += offs;
       }
       if (dst_last_bin > max_bin) {
         // out of bounds on the right
-        int offs = (int)ceilf(shift_stp_inv * (float)(max_bin - dst_last_bin));
+        int offs = static_cast<int>(ceilf(shift_stp_inv * static_cast<float>(max_bin - dst_last_bin)));
         dst_last_bin -= offs * shift_stp;
         procSrcOnly(src_last_bin - offs + 1, src_last_bin);
         src_last_bin -= offs;
@@ -468,18 +468,18 @@ public:
         procSrcOnly(src_first_bin, src_last_bin);
         return;
       }
-      float shift_stp_inv = 1.0f / (float)shift_stp;
+      float shift_stp_inv = 1.0f / static_cast<float>(shift_stp);
 
       if (dst_first_bin > max_bin) {
         // out of bounds on the right but we need to adjust src on the left
-        int offs = (int)ceilf(shift_stp_inv * (float)(max_bin - dst_first_bin));
+        int offs = static_cast<int>(ceilf(shift_stp_inv * static_cast<float>(max_bin - dst_first_bin)));
         dst_first_bin += offs * shift_stp;
         procSrcOnly(src_first_bin, src_first_bin + offs - 1);
         src_first_bin += offs;
       }
       if (dst_last_bin < 0) {
         // out of bounds on the left but we need to adjust src on the right
-        int offs = (int)ceilf(shift_stp_inv * (float)dst_last_bin);
+        int offs = static_cast<int>(ceilf(shift_stp_inv * static_cast<float>(dst_last_bin)));
         dst_last_bin -= offs * shift_stp;
         procSrcOnly(src_last_bin - offs + 1, src_last_bin);
         src_last_bin -= offs;

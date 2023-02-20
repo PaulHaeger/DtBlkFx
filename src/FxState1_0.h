@@ -71,11 +71,12 @@ public:
   int _fx_set;
 
   // parent
-  _Ptr<DtBlkFx> _b;
+  //TODO: Can this be replaced with smart pointers?
+  _Ptr<DtBlkFxAudioProcessor> _b;
 
-  DtBlkFx* blkfx() { return _b; }
+  DtBlkFxAudioProcessor* blkfx() { return _b; }
 
-  operator DtBlkFx*() { return _b; }
+  operator DtBlkFxAudioProcessor*() { return _b; }
 
   FxRun1_0* getFxRun(bool for_display = true);
 

@@ -60,6 +60,7 @@ TODO:
 #include "FxRun1_0.h"
 #include "FxState1_0.h"
 #include "HarmData.h"
+#include "DtBlkFxProcessor.h"
 
 using namespace std;
 
@@ -89,9 +90,9 @@ public:
   }
 
   // MUST call init before use
-  void init(DtBlkFx* b)
+  void init(DtBlkFxAudioProcessor* b)
   {
-    _mult = (long long)b->_blk_samp_abs * g_sincos_table.LEN;
+    _mult = static_cast<long long>(b->_blk_samp_abs) * g_sincos_table.LEN;
     _fft_len = b->_freq_fft_n;
   }
 };
@@ -99,19 +100,19 @@ public:
 //-------------------------------------------------------------------------------------------------
 
 // initialize phase correction
-void init(ShiftPhaseCorrect& phase_corr, DtBlkFx* b)
+void init(ShiftPhaseCorrect& phase_corr, DtBlkFxAudioProcessor* b)
 {
   phase_corr.init(b->_blk_samp_abs, b->_freq_fft_n);
 }
 
 // initialize temporary buffer
-template <int CHANNELS> void init(CplxfTmp<CHANNELS>& buf, DtBlkFx* b)
+template <int CHANNELS> void init(CplxfTmp<CHANNELS>& buf, DtBlkFxAudioProcessor* b)
 {
   buf.init(b->_FFTdata<CHANNELS>(), b->_FFTdataTmp<CHANNELS>());
 }
 
 // initialize frq shift
-template <int CHANNELS> void init(FrqShiftFft<CHANNELS>& proc, DtBlkFx* b)
+template <int CHANNELS> void init(FrqShiftFft<CHANNELS>& proc, DtBlkFxAudioProcessor* b)
 {
   // init the temp buffer
   init(proc._buf, b);
@@ -172,7 +173,7 @@ public:
   _Ptr<FxState1_0> _s;
 
   // blkfx that state is attached to
-  _Ptr<DtBlkFx> _b;
+  _Ptr<DtBlkFxAudioProcessor> _b;
 
   ProcessBase(FxState1_0* s)
   {
@@ -324,14 +325,14 @@ struct HarmParam
       _spacing = 4;
 
     float fwidth = limit_range(_spacing * h.f_part, 0.0f, _spacing);
-    _half_width = (long)fwidth / 2;
+    _half_width = static_cast<long>(fwidth) / 2;
     _width = _half_width * 2;
 
     // don't do too many harmonics
-    _max_bin = (long)(_spacing * 200);
+    _max_bin = static_cast<long>(_spacing * 200);
 
     // don't go below fundamental (i.e. don't treat 0Hz as a harmonic)
-    _min_bin = (long)_offs - _half_width;
+    _min_bin = static_cast<long>(_offs) - _half_width;
   }
 };
 
@@ -401,7 +402,7 @@ public:
     }
     else {
       // process spectrum fwd
-      roundHarm((float)b0);
+      roundHarm(static_cast<float>(b0));
 
       // min bin for harmonic
       long p = b0;
@@ -758,7 +759,7 @@ bool /*true=prev was a mask*/ getHarmMaskFreqMult(FxRun1_0* prev_fx, float& /*ou
 template <class T> inline void SplitMaskRun(FxState1_0* s, T& process)
 // split process entire frequency range
 {
-  DtBlkFx* b = s->_b;
+  DtBlkFxAudioProcessor* b = s->_b;
   SplitMaskProcess<T> split(s, process);
   split.prepare(/*parent*/ NULL);
   split.run(/*start bin*/ 0, /*end bin*/ b->_freq_fft_n / 2);
@@ -859,7 +860,7 @@ template <class T> void AutoHarmMaskRun(FxState1_0* s, T& end_process)
     return;
 
   // if the previous effect wasn't a harmonic mask, assume autoharm mask
-  DtBlkFx* b = s->_b;
+  DtBlkFxAudioProcessor* b = s->_b;
   AutoHarmMaskProcess<T> auto_mask(
       s, end_process, /*fx_val*/ 0.2499f, /*freq mult*/ 1.0f, /*b0*/ 1, /*b1*/ b->_freq_fft_n / 8);
   MaskedRun(s, auto_mask);
@@ -1619,7 +1620,7 @@ public:
 
   virtual void process(FxState1_0* s)
   {
-    DtBlkFx* b = s->_b;
+    DtBlkFxAudioProcessor* b = s->_b;
 
     //
     AmpProcess amp(s);
@@ -1998,7 +1999,7 @@ public:
         float targ_hz = NoteOffsToHz(fx_val * BlkFxParam::noteSpan());
         float denom = _parent->_freq * _b->getSampleRate();
         if (denom > 0)
-          frq_mult = targ_hz * (float)_b->_freq_fft_n / denom;
+          frq_mult = targ_hz * static_cast<float>(_b->_freq_fft_n) / denom;
       }
     }
 
@@ -2020,7 +2021,8 @@ public:
   {
     // determine offset to apply to bins
     FixPoint<12> bin_shift = _parent->_curr_cent * _shift_mult;
-    _shift.run</*CONJ*/ 0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
+    _shift.run<0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
+
   }
 
   void done() { _shift.flush(); }
@@ -2254,7 +2256,7 @@ public:
 
   virtual void process(FxState1_0* s)
   {
-    DtBlkFx* b = s->_b;
+    DtBlkFxAudioProcessor* b = s->_b;
 
     float amp = s->temp.amp;
     float mult_frac = getMultFrac(s->temp.val);
@@ -2480,7 +2482,7 @@ public:
   {
     // RL_mode=0: src ch is left, dst ch is right
     // RL_mode=1: src ch is right, dst ch is left
-    DtBlkFx* b = s->_b;
+    DtBlkFxAudioProcessor* b = s->_b;
 
     int src_ch = 0, dst_ch = 1;
     if (_RL_mode)

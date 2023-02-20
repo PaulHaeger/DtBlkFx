@@ -17,7 +17,6 @@ TODO:
   this is getting big and fat
 ***************************************************************************************************/
 
-//#include <StdAfx.h>
 #if 0
 #  include "MainGuiPanel.h"
 #  include "wx/spinctrl.h"
@@ -27,7 +26,7 @@ TODO:
 //#include "MorphParamEdit.h"
 #endif
 
-#include "DtBlkFx.hpp"
+#include "DtBlkFxProcessor.h"
 #include "FxState1_0.h"
 
 #include "Debug.h"
@@ -56,7 +55,7 @@ FxRun1_0* FxState1_0::getFxRun(bool for_display)
 }
 
 //-------------------------------------------------------------------------------------------------
-void FxState1_0::init(DtBlkFx* b, int fx_set)
+void FxState1_0::init(DtBlkFxAudioProcessor* b, int fx_set)
 {
   //_disp_freq_mode = DISP_FREQ_HZ;
 
@@ -86,7 +85,7 @@ FxState1_0* FxState1_0::prevFxState()
 {
   // no previous?
   if (_fx_set <= 0)
-    return NULL;
+    return nullptr;
 
   // get the prev fx state from blkfx
   return _b->_fx1_0 + _fx_set - 1;

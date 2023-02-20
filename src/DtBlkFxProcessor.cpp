@@ -637,9 +637,10 @@ void DtBlkFxAudioProcessor::setProgram(int32_t num)
   LOG("", "DtBlkFxProcessor::setProgram" << VAR(num));
 
   // normal case
-  if (num < static_cast<int32_t>(_program.size()) - 1)
-    juce::AudioProcessor::setCurrentProgram(num);
-  else {
+  if (num < static_cast<int32_t>(_program.size()) - 1){
+      //TODO: What to do here?
+    //juce::AudioProcessor::setCurrentProgram(num);
+  }else {
     // check for the special "reset current program"
     // reset current program to defaults
     if (idx_within(currProgramNum(), g_blk_fx_presets))
