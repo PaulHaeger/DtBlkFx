@@ -426,7 +426,7 @@ public:
            int src_last_bin,           // stop bin
            FixPoint<12> dst_first_bin, // initial destination bin (may be out of range)
            FixPoint<12> shift_stp = 1  // shift scaling to apply (destination step)
-  )
+          )
   {
     // maximum bin to process to (inclusive)
     int max_bin = _phase_corr.maxBin();

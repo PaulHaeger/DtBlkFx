@@ -26,6 +26,7 @@ General Public License for more details.
 
 ***************************************************************************************************/
 
+#include <juce_core/juce_core.h>
 #include "BlkFxParam.h"
 #include "MorphParam.h"
 #include <string.h>
@@ -62,12 +63,14 @@ public:
   virtual ~FxRun1_0() {}
 
   // DtBlkFx calls this to perform the FFT effect
-  virtual void process(FxState1_0* s) {}
+  virtual void process(FxState1_0* s) {juce::ignoreUnused(s);}
 
   // get the display text corresponding to "val"
   virtual Rng<char> /*updated rng*/ dispVal(FxState1_0* s, Rng<char> /*out*/ text,
                                             float /*0..1*/ val)
   {
+      juce::ignoreUnused(s);
+      juce::ignoreUnused(val);
     return text << "-";
   }
 
@@ -86,17 +89,17 @@ public: // methods for the GUI
   virtual bool isMask() { return false; }
 
   //
-  virtual const char* getValueName(int idx)
+  virtual const char* getValueName(size_t idx)
   {
     if (!idx_within(idx, _value_presets))
-      return NULL;
+      return nullptr;
     return _value_presets[idx].str;
   }
 
   //
-  virtual float getValue(int idx, float curr_val)
+  virtual float getValue(size_t idx, float curr_val)
   {
-    return idx >= static_cast<int>(_value_presets.size()) ? curr_val : _value_presets[idx].val;
+    return idx >= _value_presets.size() ? curr_val : _value_presets[idx].val;
   }
 
 public: // internal stuff to do with value presets
@@ -106,7 +109,7 @@ public: // internal stuff to do with value presets
   };
 
   // internal method that uses display value to fill presets
-  void _fillValues(int num_presets, float out_min = 0.0f, float out_max = 1.0f,
+  void _fillValues(size_t num_presets, float out_min = 0.0f, float out_max = 1.0f,
                    bool rng_inclusive = true);
 
   void _fillValues(Rng<float> values);

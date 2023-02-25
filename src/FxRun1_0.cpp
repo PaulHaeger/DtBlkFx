@@ -61,6 +61,7 @@ TODO:
 #include "FxState1_0.h"
 #include "HarmData.h"
 #include "DtBlkFxProcessor.h"
+#include "fftw_support.cpp"
 
 using namespace std;
 
@@ -125,23 +126,23 @@ template <int CHANNELS> void init(FrqShiftFft<CHANNELS>& proc, DtBlkFxAudioProce
 }
 
 //*************************************************************************************************
-void FxRun1_0::_fillValues(int num_presets, float out_min, float out_max, bool rng_inclusive)
+void FxRun1_0::_fillValues(size_t num_presets, float out_min, float out_max, bool rng_inclusive)
 // internal method that uses display value to fill _presets array
 {
   //
-  int start_idx = _value_presets.size();
+  size_t start_idx = _value_presets.size();
 
   // ensure there's enough room
   _value_presets.resize(start_idx + num_presets);
 
-  float in_max = (float)num_presets;
+  float in_max = static_cast<float>(num_presets);
   if (rng_inclusive)
     in_max--;
 
   // generate
-  for (int i = 0; i < num_presets; i++) {
-    int j = i + start_idx;
-    _value_presets[j].val = lin_scale((float)i, /*in min*/ 0.0f, in_max, out_min, out_max);
+  for (size_t i = 0; i < num_presets; i++) {
+    size_t j = i + start_idx;
+    _value_presets[j].val = lin_scale(static_cast<float>(i), /*in min*/ 0.0f, in_max, out_min, out_max);
     dispVal(/*fx state*/ NULL, /*out*/ _value_presets[j].str, _value_presets[j].val);
   }
 }
@@ -150,13 +151,13 @@ void FxRun1_0::_fillValues(int num_presets, float out_min, float out_max, bool r
 void FxRun1_0::_fillValues(Rng<float> values)
 {
   //
-  int j = _value_presets.size();
+  size_t j = _value_presets.size();
 
   // resize
   _value_presets.resize(j + values.n);
 
   // fill the menu
-  for (int i = 0; i < values.n; i++) {
+  for (size_t i = 0; i < values.n; i++) {
     _value_presets[j].val = values[i];
     dispVal(/*FxState1_0*/ NULL, _value_presets[j].str, values[i]);
     j++;
@@ -177,18 +178,24 @@ public:
 
   ProcessBase(FxState1_0* s)
   {
-    _s = s;
-    _b = s->_b;
+      //TODO: Some sort of exception if this is not the case
+      if (s != nullptr) {
+        _s = s;
+        _b = s->_b;
+      }
   }
 
   // whether to process backwards or not
   bool reverse() { return false; }
 
   // prepare to run using the previous process base
-  void prepare(ProcessBase* parent) {}
+  void prepare(ProcessBase* parent) {juce::ignoreUnused(parent);}
 
   // run from b0 to b1 inclusive
-  void run(long b0, long b1) {}
+  void run(long b0, long b1) {
+      juce::ignoreUnused(b0);
+      juce::ignoreUnused(b1);
+  }
 
   // called after effect is done
   void done() {}
@@ -242,7 +249,10 @@ public:
   // default these to calling through to next processing
   bool reverse() { return _process->reverse(); }
 
-  void prepare(ProcessBase* parent) { _process->prepare(this); }
+  void prepare(ProcessBase* parent) {
+      juce::ignoreUnused(parent);
+      _process->prepare(this);
+  }
 
   void done() { _process->done(); }
 };
@@ -348,7 +358,10 @@ public:
   // current harmonic (0 = fundamental*multiplier)
   float _curr_harm;
 
-  void prepare(ProcessBase* parent) { MaskProcessBase<T>::_process->prepare(this); }
+  void prepare(ProcessBase* parent) {
+      juce::ignoreUnused(parent);
+      MaskProcessBase<T>::_process->prepare(this);
+  }
 
   HarmMaskProcess(FxState1_0* s, T& process, float /*0..1*/ fx_val, float /*bin pos*/ harm0)
       : MaskProcessBase<T>(s)
@@ -982,7 +995,7 @@ struct ContrastProcess
         in_pwr += norm(*x.a);
 
       // find scale factor to normalize power to make sure powf works correctly
-      float scale = MatchPwr(/*scale*/ 1.0f, /*target*/ (float)(b1 - b0 + 1), /*current*/ in_pwr);
+      float scale = MatchPwr(/*scale*/ 1.0f, /*target*/ static_cast<float>(b1 - b0 + 1), /*current*/ in_pwr);
 
       // output power for this range
       float out_pwr = 0;
@@ -1103,7 +1116,7 @@ public:
       ThreshMaskProcess<AmpProcess, /*SELECT_BELOW*/ 0> thresh_mask(s, amp, split.f_part);
       MaskedRun(s, thresh_mask);
     }
-  }
+}
 
   virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
   {
@@ -1500,7 +1513,7 @@ public:
   }
 
   //
-  virtual float getValue(int idx, float curr_val)
+  virtual float getValue(size_t idx, float curr_val)
   {
     return GetShiftValuePreset(this, idx, curr_val);
   }
@@ -1981,7 +1994,7 @@ public:
 
         // repitch
         if (peak_r.max_pwr > 1e-25f && _parent->_freq > 0)
-          frq_mult = (float)peak_r / _parent->_freq;
+          frq_mult = static_cast<float>(peak_r) / _parent->_freq;
 
         frq_mult *= powf(2.0f,
                          lin_scale(fx_val,
@@ -2021,7 +2034,8 @@ public:
   {
     // determine offset to apply to bins
     FixPoint<12> bin_shift = _parent->_curr_cent * _shift_mult;
-    _shift.run<0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
+    //without this ugly template fix the compiler will think this is a operator< call
+    _shift. template run</*CONJ*/ 0>(/*src first*/ b0, /*src last*/ b1, /*dst first*/ b0 + bin_shift);
 
   }
 
@@ -2038,7 +2052,7 @@ public:
   }
 
   //
-  virtual float getValue(int idx, float curr_val)
+  virtual float getValue(size_t idx, float curr_val)
   {
     return GetShiftValuePreset(this, idx, curr_val);
   }
@@ -2094,12 +2108,12 @@ public:
     // shift target note by these
     for (int i = 0; i < amt.n; i++) {
       _value_presets[j].val = amt[i];
-      _value_presets[j].str << sprf("Change by %+d notes", (int)amt[i]);
+      _value_presets[j].str << sprf("Change by %+d notes", static_cast<int>(amt[i]));
       j++;
     }
   }
 
-  virtual float getValue(int idx, float curr_val)
+  virtual float getValue(size_t idx, float curr_val)
   {
     if (!idx_within(idx, _value_presets))
       return curr_val;
@@ -2192,7 +2206,7 @@ public:
   }
 
   //
-  virtual float getValue(int idx, float curr_val)
+  virtual float getValue(size_t idx, float curr_val)
   {
     return GetShiftValuePreset(this, idx, curr_val);
   }
