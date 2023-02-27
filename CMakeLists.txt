@@ -67,7 +67,7 @@ juce_add_plugin(DtBlkFx
 
 # juce_generate_juce_header(AudioPluginExample)
 
-find_package(FFTW3 CONFIG REQUIRED)
+find_package(FFTW3f CONFIG REQUIRED)
 
 # `target_sources` adds source files to a target. We pass the target that needs the sources as the
 # first argument, then a visibility parameter for the sources (PRIVATE is normally best practice,
@@ -123,6 +123,8 @@ target_compile_definitions(DtBlkFx
 # linked automatically. If we'd generated a binary data target above, we would need to link to it
 # here too. This is a standard CMake command.
 
+message(DEBUG ${FFTW3})
+
 target_link_libraries(DtBlkFx PRIVATE
     # JUCE Modules
     juce::juce_audio_utils
@@ -135,7 +137,7 @@ target_link_libraries(DtBlkFx PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
 
-    FFTW3::fftw3
+    FFTW3::fftw3f
 )
 
 SET_PROPERTY(TARGET DtBlkFx PROPERTY CXX_STANDARD 17)
