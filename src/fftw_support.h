@@ -21,6 +21,7 @@ inline fftwf_complex* to_fftwf_complex(cplxf* t)
 }
 
 #ifdef _WIN32
+//TODO: This is probably different now!!
 // on windows we load fftw ourselves
 //-------------------------------------------------------------------------------------------------
 // functions loaded from "libfftw3f-3.dll" - these can only be called if LoadFFTWdll was ok
