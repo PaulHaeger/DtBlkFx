@@ -31,7 +31,13 @@
 #include "misc_stuff.h"
 
 class DtBlkFxAudioProcessor : public juce::AudioProcessor {
+private:
+    std::vector<VstProgram<BlkFxParam::TOTAL_NUM>> g_blk_fx_presets;
+    //TODO: Is this flag needed?
+    bool presetLoadOk = true;
+    void LoadPresets(const juce::File& filepath);
 public:
+  CharArray<4096> g_plugin_path;
   enum { MAX_FX = 16, AUDIO_CHANNELS = BlkFxParam::AUDIO_CHANNELS };
 
   DtBlkFxAudioProcessor();

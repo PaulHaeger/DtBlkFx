@@ -24,7 +24,8 @@
 
 #include <stdio.h>
 #include <cstdint>
-#include <string.h>
+#include <string>
+#include <fstream>
 
 #include "wrapprocessfloatvec.h"
 
@@ -32,8 +33,8 @@
 #include "rfftw_float.h"
 
 // filled by BlkFxMain.cpp
-//TODO: This will probabably need to be differently done in the JUCE Port
-extern std::vector<VstProgram<BlkFxParam::TOTAL_NUM>> g_blk_fx_presets;
+//TODO: Remove this once made a member successfully
+//extern std::vector<VstProgram<BlkFxParam::TOTAL_NUM>> g_blk_fx_presets;
 
 //#define WR_PARAM
 #ifdef WR_PARAM
@@ -100,6 +101,27 @@ enum {
 // from BlkFxMain.cpp
 //extern bool GlobalInitOk();
 
+void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
+    juce::FileInputStream f(filepath);
+    if(f.failedToOpen()){
+        juce::FileLogger::writeToLog(juce::String("Failure loading presets: '") + filepath.getFullPathName() + "' could not be opened.");
+
+      g_blk_fx_presets.resize(20);
+      g_blk_fx_presets[0].name << "file not found";
+      for (size_t i = 1; i < g_blk_fx_presets.size(); ++i){
+        g_blk_fx_presets[i].name << static_cast<int>(i) << " user";
+      }
+      presetLoadOk = false;
+
+      return;
+    }
+
+    while(!f.isExhausted()) {
+        juce::String line =  f.readNextLine();
+        g_blk_fx_presets.push_back(VstProgram<BlkFxParam::TOTAL_NUM>(line.toRawUTF8()));
+    }
+}
+
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
     : AudioProcessor(BusesProperties()
 #if !JucePlugin_IsMidiEffect
@@ -123,11 +145,15 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   //if (GlobalInitOk())
   //  setEditor(new Gui(this));
 
-  //
-  for (i = 0; i < _fx1_0.size(); i++)
-    _fx1_0[i].init(this, /*fx set*/ i);
+  //Load Presets
+  //TODO: A binary resource might be more appropiate?
+  juce::File presetPath = juce::File::getSpecialLocation(juce::File::currentApplicationFile).getChildFile("presets.txt");
+  LoadPresets(presetPath);
 
-  //
+  for (i = 0; i < _fx1_0.size(); i++){
+    _fx1_0[i].init(this, /*fx set*/ i);
+  }
+
   configParams1_0();
 
   // get buffer space
