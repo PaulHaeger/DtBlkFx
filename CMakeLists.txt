@@ -133,4 +133,5 @@ target_link_libraries(DtBlkFx PRIVATE
     FFTW3::fftw3
 )
 
+SET_PROPERTY(TARGET DtBlkFx PROPERTY CXX_STANDARD 17)
 target_compile_features(DtBlkFx PRIVATE cxx_std_17)
