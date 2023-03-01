@@ -123,8 +123,6 @@ target_compile_definitions(DtBlkFx
 # linked automatically. If we'd generated a binary data target above, we would need to link to it
 # here too. This is a standard CMake command.
 
-message(DEBUG ${FFTW3})
-
 target_link_libraries(DtBlkFx PRIVATE
     # JUCE Modules
     juce::juce_audio_utils
