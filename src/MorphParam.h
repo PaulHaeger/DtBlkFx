@@ -15,14 +15,14 @@ struct MorphParamArrayAccess
   _Ptr<MorphParam> morph;
 
   //
-  int idx;
+  unsigned int idx;
 
   // since morph params are actually 2-d arrays, this controls the direction
   bool idx_is_anchor; // false = idx is param number
 
-  int size();
-  float operator[](int i) const;
-  float& operator[](int i);
+  size_t size();
+  float operator[](size_t i) const;
+  float& operator[](size_t i);
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -45,13 +45,13 @@ protected: // internals
   std::valarray<float> anchor_data;
 
   // number of morph anchor points (anchor_data.size() >= anchor_n*param_n)
-  int anchor_n;
+  unsigned int anchor_n;
 
   // number of params
-  int param_n;
+  unsigned int param_n;
 
   // which vst param we're attached to
-  int vst_param_idx;
+  unsigned int vst_param_idx;
 
   // interpolation mode (see above)
   Mode mode;
@@ -67,12 +67,12 @@ public:
   }
 
   void setModeFixed() { mode = MODE_FIXED; }
-  void setModeLin(int vst_param_idx_)
+  void setModeLin(unsigned int vst_param_idx_)
   {
     vst_param_idx = vst_param_idx_;
     mode = MODE_LIN_INTERP;
   }
-  void setModeStep(int vst_param_idx_)
+  void setModeStep(unsigned int vst_param_idx_)
   {
     vst_param_idx = vst_param_idx_;
     mode = MODE_STEP;
@@ -95,11 +95,11 @@ public:
     return mode == MODE_FIXED ? -1 : vst_param_idx;
   }
 
-  int numParams() const { return param_n; }
-  int numAnchorPoints() const { return anchor_n; }
+  unsigned int numParams() const { return param_n; }
+  unsigned int numAnchorPoints() const { return anchor_n; }
 
   // set morph table size
-  void setNumAnchorPoints(int n)
+  void setNumAnchorPoints(unsigned int n)
   {
     // only grow (so data is not lost if shrunk)
     if (n > anchor_n)
@@ -108,9 +108,9 @@ public:
   }
 
   // set the number of params
-  void setNumParams(int n)
+  void setNumParams(unsigned int n)
   {
-    int old_param_n = param_n;
+    unsigned int old_param_n = param_n;
     param_n = n;
 
     // resize and clear
@@ -118,14 +118,14 @@ public:
     anchor_data.resize(anchor_n * param_n, 0.0f);
 
     // copy old morph params across
-    int bytes_cpy = sizeof(float) * std::min(old_param_n, param_n);
-    for (int i = 0; i < anchor_n; i++)
+    size_t bytes_cpy = sizeof(float) * std::min(old_param_n, param_n);
+    for (unsigned int i = 0; i < anchor_n; i++)
       memcpy(anchorData(i), begin(old_anchor_data) + i * old_param_n, bytes_cpy);
   }
 
   // set all morph points from "src_data", src data must be contiguous 2d array
   // in format [anchor_idx][param_idx]
-  void setAll(Rng<float> src_data, int param_n_ = 1)
+  void setAll(Rng<float> src_data, unsigned int param_n_ = 1)
   {
     param_n = param_n_;
     anchor_n = src_data.n / param_n;
@@ -134,7 +134,7 @@ public:
   }
 
   // return anchor array for a particular param
-  MorphParamArrayAccess anchorArray(int param_idx = 0)
+  MorphParamArrayAccess anchorArray(unsigned int param_idx = 0)
   {
     MorphParamArrayAccess a;
     a.morph = this;
@@ -144,7 +144,7 @@ public:
   }
 
   // return array for a particular morph set
-  MorphParamArrayAccess paramArray(int anchor_idx = 0)
+  MorphParamArrayAccess paramArray(unsigned int anchor_idx = 0)
   {
     MorphParamArrayAccess a;
     a.morph = this;
@@ -154,45 +154,58 @@ public:
   }
 
   // limit anchor index
-  int limitAnchorIdx(int anchor_idx) const { return limit_range(anchor_idx, 0, anchor_n - 1); }
+  unsigned int limitAnchorIdx(unsigned int anchor_idx) const { return limit_range(anchor_idx, 0, anchor_n - 1); }
 
-  int limitParamIdx(int param_idx) const { return limit_range(param_idx, 0, param_n - 1); }
+  unsigned int limitParamIdx(unsigned int param_idx) const { return limit_range(param_idx, 0, param_n - 1); }
 
   // get params morph data for a particular anchor index (data is param_n long)
-  float* anchorData(int anchor_idx) const
+  const float* anchorData(unsigned int anchor_idx) const
   {
     const float* it = std::begin(anchor_data);
-    return (float*)it + limitAnchorIdx(anchor_idx) * param_n;
+    return it + limitAnchorIdx(anchor_idx) * param_n;
   }
 
-  float& anchorData(int anchor_idx, int param_idx) { return anchorData(anchor_idx)[param_idx]; }
+  float* anchorData(unsigned int anchor_idx)
+  {
+    float* it = std::begin(anchor_data);
+    return it + limitAnchorIdx(anchor_idx) * param_n;
+  }
+
+  float& anchorData(unsigned int anchor_idx, unsigned int param_idx) {
+      return anchorData(anchor_idx)[param_idx];
+  }
 
   // given a fraction, return closest anchor idx
-  int closestAnchorIdx(float /*0..1*/ idx_f) const
+  unsigned int closestAnchorIdx(float /*0..1*/ idx_f) const
   {
-    return RndToInt(lin_interp_limit(idx_f, 0.0f, (float)anchor_n - 1));
+    return RndToUInt(lin_interp_limit(idx_f, 0.0f, static_cast<float>(anchor_n) - 1));
   }
 
   // find what fraction a particular anchor index corresponds to
-  float /*0..1*/ anchorIdxToFrac(int anchor_idx) const
+  float /*0..1*/ anchorIdxToFrac(unsigned int anchor_idx) const
   {
-    return anchor_n > 1 ? (float)limitAnchorIdx(anchor_idx) / ((float)anchor_n - 1) : 0.5f;
+    return anchor_n > 1 ? static_cast<float>(limitAnchorIdx(anchor_idx)) / (static_cast<float>(anchor_n) - 1) : 0.5f;
   }
 
   // return anchor data from rounded morph position (equivalent to MODE_STEP)
-  float* closestAnchorData(float /*0..1*/ idx_f) const
+  const float* closestAnchorData(float /*0..1*/ idx_f) const
+  {
+    return anchorData(closestAnchorIdx(idx_f));
+  }
+
+  float* closestAnchorData(float /*0..1*/ idx_f)
   {
     return anchorData(closestAnchorIdx(idx_f));
   }
 
   // get a particular anchor point
-  float get(int anchor_idx, int param_idx = 0) const
+  float get(unsigned int anchor_idx, unsigned int param_idx = 0) const
   {
     return anchorData(anchor_idx)[limitParamIdx(param_idx)];
   }
 
   // set a morph control point to "value"
-  void set(float value, int anchor_idx = 0, int param_idx = 0)
+  void set(float value, unsigned int anchor_idx = 0, unsigned int param_idx = 0)
   {
     anchorData(anchor_idx)[limitParamIdx(param_idx)] = value;
   }
@@ -201,11 +214,11 @@ public:
   int                    /*num values written*/
   get(float morph_pos,   // control position of morph (ignored if MODE_FIXED), 0..1
       Rng<float> result, // destination
-      int param_idx,     // first index of param to return
+      unsigned int param_idx,     // first index of param to return
       int /*Mode*/ mode_ // force a different mode
       ) const
   {
-    int max_n = param_n - param_idx;
+    unsigned int max_n = param_n - param_idx;
     if (result.n > max_n)
       result.n = max_n;
     if (result.n <= 0)
@@ -215,9 +228,9 @@ public:
     switch (mode_) {
       case MODE_LIN_INTERP: {
         // linear interpolation
-        float t = morph_pos * (float)(anchor_n - 1);
+        float t = morph_pos * static_cast<float>(anchor_n - 1);
         float floor_t = floorf(t);
-        int i = (int)floor_t;
+        unsigned int i = static_cast<unsigned int>(floor_t);
         const float* src0 = anchorData(i) + param_idx;
         const float* src1 = anchorData(i + 1) + param_idx;
         float mix1 = t - floor_t;
@@ -241,7 +254,7 @@ public:
   }
 
   // see get() above, use current mode
-  int get(float morph_pos, Rng<float> result, int param_idx = 0) const
+  int get(float morph_pos, Rng<float> result, unsigned int param_idx = 0) const
   {
     return get(morph_pos, result, param_idx, mode);
   }
@@ -262,13 +275,13 @@ public:
   //     my_param.update(my_paramsdelay.getInterpFn(), /*out*/result);
   //
   template <class T>
-  int /*elements copied*/ get(const T& vst_param_array, Rng<float> result, int param_idx = 0) const
+  int /*elements copied*/ get(const T& vst_param_array, Rng<float> result, unsigned int param_idx = 0) const
   {
     return get(mode != MODE_FIXED ? vst_param_array[vst_param_idx] : 0.0f, result, param_idx);
   }
 
   // get a single param
-  template <class T> float getSingle(T& t /*float 0..1 or array of float*/, int param_idx = 0) const
+  template <class T> float getSingle(T& t /*float 0..1 or array of float*/, unsigned int param_idx = 0) const
   {
     Array<float, 1> r;
     get(t, /*out*/ r, param_idx);
@@ -276,14 +289,14 @@ public:
   }
 
   // operator() calls "getSingle"
-  template <class T> float operator()(const T& t, int param_idx = 0) const
+  template <class T> float operator()(const T& t, unsigned int param_idx = 0) const
   {
     return getSingle(t, param_idx);
   }
 
   //
-  bool /*got point*/ nextLineDrawPoint(int& state, float& /*0..1*/ x, float& /*0..1*/ y,
-                                       int param = 0)
+  bool /*got point*/ nextLineDrawPoint(unsigned int& state, float& /*0..1*/ x, float& /*0..1*/ y,
+                                       unsigned int param = 0)
   // note y is "upside down" so that anchor point 0 can be drawn at the bottom of the window
   {
     if (mode != MODE_STEP) {
@@ -301,8 +314,8 @@ public:
     if (state >= anchor_n * 2)
       return false;
     x = get(state / 2, param);
-    float y_stp = 1.0f / (float)(anchor_n - 1);
-    float y_mult = ((float)state + 1) / 2 - 0.5f;
+    float y_stp = 1.0f / static_cast<float>(anchor_n - 1);
+    float y_mult = (static_cast<float>(state) + 1) / 2 - 0.5f;
     y = limit_range(y_stp * y_mult, 1.0f, 0.0f);
     state++;
     return true;
@@ -325,21 +338,21 @@ inline int toVstParamIdx(const MorphParam* morph)
 }
 
 //-------------------------------------------------------------------------------------------------
-inline int MorphParamArrayAccess::size()
+inline size_t MorphParamArrayAccess::size()
 {
   if (idx_is_anchor)
     return morph->numParams();
   return morph->numAnchorPoints();
 }
 
-inline float MorphParamArrayAccess::operator[](int i) const
+inline float MorphParamArrayAccess::operator[](size_t i) const
 {
   if (idx_is_anchor)
     return morph->get(idx, i);
-  return morph->get(i, idx);
+  return morph->get(static_cast<unsigned int>(i), idx);
 }
 
-inline float& MorphParamArrayAccess::operator[](int i)
+inline float& MorphParamArrayAccess::operator[](size_t i)
 {
   if (idx_is_anchor)
     return morph->anchorData(idx, i);

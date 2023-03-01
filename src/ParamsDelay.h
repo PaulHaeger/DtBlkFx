@@ -23,20 +23,20 @@ when moving functions outside because they would all need to be templated
 #include <cstring>
 #include <type_traits>
 
-inline int toVstParamIdx(int i);
+inline unsigned int toVstParamIdx(unsigned int i);
 
 //-------------------------------------------------------------------------------------------------
 struct VstParamIdx
-    : public BuiltinWrapper<int>
+    : public BuiltinWrapper<unsigned int>
 // wrapper for vst param indexes (int) so that MorphParam can be used as an index directly
 {
   VstParamIdx() {}
-  
+
   template <class T> VstParamIdx(const T& t) { val = toVstParamIdx(t); }
 };
 
 // usual thing that VstParamIdx's are constructed from
-inline int toVstParamIdx(int i)
+inline unsigned int toVstParamIdx(unsigned int i)
 {
   return i;
 }
@@ -46,16 +46,16 @@ inline int toVstParamIdx(int i)
 class ParamsDelay {
 protected:
   // delay length
-  int _length;
+  unsigned int _length;
 
   // number of params
-  int _n_params;
+  unsigned int _n_params;
 
   // current input position
-  int _in;
+  unsigned int _in;
 
   // current output position (we interpolate between these)
-  int _out_a, _out_b;
+  unsigned int _out_a, _out_b;
 
   // expected distance between samp_abs_new in Params (normally matches a fraction of the
   // tempo, e.g. samples per quarter-note). This is used to control interpolation - params
@@ -67,7 +67,7 @@ protected:
   float _interp_frac;
 
   // increment index "i", wrapping to 0 if need be
-  void incIndex(int& i)
+  void incIndex(unsigned int& i)
   {
     if (++i >= _length)
       i = 0;
@@ -92,35 +92,35 @@ protected:
   std::vector<float> _override_param;
 
   // offset of each field in each data record
-  int _field_byte_offs[2], _record_len_bytes;
+  unsigned int _field_byte_offs[2], _record_len_bytes;
 
 protected:
   // access a record from _data (which is just an array of bytes) & cast
-  template <class T> T* data(int i, int byte_offs) const
+  template <class T> T* data(unsigned int i, unsigned int byte_offs) const
   {
       //TODO: Make alias safe
-    return (T*)(begin(_data) + i * _record_len_bytes + byte_offs);
+    return reinterpret_cast<T*>(begin(_data) + i * _record_len_bytes + byte_offs);
   }
 
   // access various things in _data, do all this stuff our selves so that we create
   // contiguous records of any size
-  long& samp_abs(int row) const { return *data<long>(row, 0); }
-  float* vals(int row) const { return data<float>(row, sizeof(long)); }
-  bool& any_explicit_set(int row) const { return *data<bool>(row, _field_byte_offs[0]); }
-  bool* explicit_set(int row) const { return data<bool>(row, _field_byte_offs[1]); }
+  long& samp_abs(unsigned int row) const { return *data<long>(row, 0); }
+  float* vals(unsigned int row) const { return data<float>(row, sizeof(long)); }
+  bool& any_explicit_set(unsigned int row) const { return *data<bool>(row, _field_byte_offs[0]); }
+  bool* explicit_set(unsigned int row) const { return data<bool>(row, _field_byte_offs[1]); }
 
   // get param "param_idx" value from "row" using override if need be
-  float /*0..1: ok*/ getVal(int row, int param_idx, bool allow_override = true) const
+  float /*0..1: ok*/ getVal(unsigned int row, unsigned int param_idx, bool allow_override = true) const
   {
     return _use_override_param[param_idx] && !allow_override ? _override_param[param_idx]
                                                              : vals(row)[param_idx];
   }
 
 public:
-  bool isParamIdxOk(int idx) { return idx >= 0 && idx < _n_params; }
+  bool isParamIdxOk(unsigned int idx) { return idx >= 0 && idx < _n_params; }
 
   // must call init before use!
-  void init(int n_params, int length)
+  void init(unsigned int n_params, unsigned int length)
   {
 
     _length = length;
@@ -332,7 +332,7 @@ protected:
   // make a new node past current "_in" and that is a copy with all "explicit_set" to false
   //
   {
-    int next = _in;
+    unsigned int next = _in;
     incIndex(next);
 
     // copy previous _in to new _in

@@ -129,6 +129,14 @@ inline int RndToInt(double v)
 {
   return static_cast<int>(floor(v + 0.5));
 }
+inline unsigned int RndToUInt(float v)
+{
+  return static_cast<unsigned int>(floorf(v + 0.5f));
+}
+inline unsigned int RndToUInt(double v)
+{
+  return static_cast<unsigned int>(floor(v + 0.5));
+}
 template <class T> inline T Rnd(float v)
 {
   return (T)(v + 0.5f);
@@ -566,7 +574,7 @@ struct _PtrBase
   T* operator->() const { return ptr; }
 
   // cast to another type
-  template <class T1> T1* cast() { return (T1*)ptr; }
+  template <class T1> T1* cast() { return reinterpret_cast<T1*>(ptr); }
 
   // address-of-pointer returns pointer to ptr (don't do this - it messes up stuff that
   // wants pointer to this class or derived classes)
@@ -574,7 +582,7 @@ struct _PtrBase
 
   _PtrBase& ForceAssign(void* ptr_)
   {
-    ptr = (T*)ptr_;
+    ptr = static_cast<T*>(ptr_);
     return *this;
   }
 };
@@ -592,9 +600,9 @@ struct _Ptr
 //
 {
   // allow explicit construct from void ptr
-  explicit _Ptr(void* void_ptr) { _PtrBase<T>::ptr = (T*)void_ptr; }
+  explicit _Ptr(void* void_ptr) { _PtrBase<T>::ptr = static_cast<T*>(void_ptr); }
 
-  _Ptr(T* ptr_ = NULL) { _PtrBase<T>::ptr = ptr_; }
+  _Ptr(T* ptr_ = nullptr) { _PtrBase<T>::ptr = ptr_; }
 
   // auto cast to compatible ptr
   template <class T2> operator _Ptr<T2>() const { return (_Ptr<T2>(_PtrBase<T>::ptr)); }
@@ -610,7 +618,7 @@ struct _Ptr
   void Delete()
   {
     delete _PtrBase<T>::ptr;
-    _PtrBase<T>::ptr = NULL;
+    _PtrBase<T>::ptr = nullptr;
   }
 
   // new & delete arrays (when calling, careful not to mix with New()/Delete() above)
@@ -618,7 +626,7 @@ struct _Ptr
   void DeleteArray()
   {
     delete[] _PtrBase<T>::ptr;
-    _PtrBase<T>::ptr = NULL;
+    _PtrBase<T>::ptr = nullptr;
   }
 
   // need to define these ones
@@ -670,20 +678,20 @@ class Rng
 public:
   typedef _PtrBase<T> base;
 
-  int n; // length of range that we're pointing at
+  size_t n; // length of range that we're pointing at
 
   Rng() { n = 0; }
   Rng(const Null&)
   {
-    base::ptr = NULL;
+    base::ptr = nullptr;
     n = 0;
   }
-  Rng(T* ptr_, int n_ = 1)
+  Rng(T* ptr_, size_t n_ = 1)
   {
     base::ptr = ptr_;
     n = n_;
   }
-  Rng(T* ptr_, int offs_start, int offs_last /*inclusive*/)
+  Rng(T* ptr_, size_t offs_start, size_t offs_last /*inclusive*/)
   {
     base::ptr = ptr_ + offs_start;
     n = offs_last - offs_start + 1;
@@ -700,7 +708,7 @@ public:
       *this = toRng(src).operator Rng<T>();
   }
 
-  void adjStart(int i)
+  void adjStart(size_t i)
   {
     n -= i;
     base::ptr += i;
@@ -714,18 +722,18 @@ public:
     n = len;
   }
 
-  int size() const { return n; }
-  int sizeBytes() const { return n * sizeof(T); }
+  size_t size() const { return n; }
+  size_t sizeBytes() const { return n * sizeof(T); }
 
   T* begin() const { return base::ptr; }
   T* end() const { return n + base::ptr; }
   T* last() const { return end() - 1; }
 
   // get limits range
-  const T& get(int i) const { return base::ptr[limit_range(i, 0, n - 1)]; }
+  const T& get(size_t i) const { return base::ptr[limit_range(i, 0, n - 1)]; }
 
   // get that returns "out_of_bounds" if "i" out of bounds
-  const T& get(int i, const T& out_of_bounds) const
+  const T& get(size_t i, const T& out_of_bounds) const
   {
     return idx_within(i, *this) ? base::ptr[i] : out_of_bounds;
   }
@@ -1193,7 +1201,7 @@ template <class T, int N> inline bool operator!=(const Array<T, N>& a, const Arr
 
 //------------------------------------------------------------------------------------------
 // CharArray zeros first element on construction & gives some string things
-template <int LENGTH> class CharArray : public Array<char, LENGTH> {
+template <size_t LENGTH> class CharArray : public Array<char, LENGTH> {
 public:
   typedef Array<char, LENGTH> base;
 
@@ -1224,7 +1232,7 @@ public:
   // copies at most LENGTH-1 characters & leaves CharArray 0 terminated
   CharArray(const char* src /*0 terminated*/)
   {
-    int i = 0;
+    size_t i = 0;
 
     if (src) {
       // only copy if src is non-NULL
@@ -1237,7 +1245,7 @@ public:
   }
 
   // legnth of string
-  int strlen() { return (int)strnlen(base::data, LENGTH); }
+  size_t strlen() { return strnlen(base::data, LENGTH); }
 
   // concat "src" to the end of string
   void strcat(const char* src)
@@ -1250,7 +1258,7 @@ public:
   // a string: CharArray<32> t = "Hi there"; t.unused() << " everyone";
   Rng<char> unused()
   {
-    int n = strlen();
+    size_t n = strlen();
     return toRng(base::data + n, LENGTH - n);
   }
 
@@ -1259,26 +1267,26 @@ public:
   operator std::string() const { return base::data; }
   std::string toString() const { return base::data; }
 };
-template <int N> inline Rng<char> toRng(CharArray<N>& src)
+template <size_t N> inline Rng<char> toRng(CharArray<N>& src)
 {
   return src.rng();
 }
 
-template <int LENGTH> bool operator==(const CharArray<LENGTH>& a, const char* b)
+template <size_t LENGTH> bool operator==(const CharArray<LENGTH>& a, const char* b)
 {
   return strncmp(a, b, LENGTH) == 0;
 }
-template <int LENGTH> bool operator==(const char* a, const CharArray<LENGTH>& b)
+template <size_t LENGTH> bool operator==(const char* a, const CharArray<LENGTH>& b)
 {
   return strncmp(a, b, LENGTH) == 0;
 }
-template <int LEN1, int LEN2> bool operator==(const CharArray<LEN1>& a, const CharArray<LEN2>& b)
+template <size_t LEN1, size_t LEN2> bool operator==(const CharArray<LEN1>& a, const CharArray<LEN2>& b)
 {
   return strncmp(a, b, std::min(LEN1, LEN2)) == 0;
 }
 
 //------------------------------------------------------------------------------------------
-template <int LENGTH> struct SprfCharArray : public CharArray<LENGTH> {
+template <size_t LENGTH> struct SprfCharArray : public CharArray<LENGTH> {
   SprfCharArray(const char* fmt, ...)
   {
     va_list args;
