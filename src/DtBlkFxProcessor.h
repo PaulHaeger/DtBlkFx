@@ -314,14 +314,14 @@ public:
   }
 
   // get morphed values using vst params (if need be)
-  int /*elements copied*/ get(ParamsDelayGetFn get_fn, const MorphParam* morph, Rng<float> result,
-                              int param_idx = 0)
+  int /*elements copied*/ get(ParamsDelayGetFn get_fn, const MorphParam* morph,
+          Rng<float> result, unsigned int param_idx = 0)
   {
     return morph->get((*get_fn)(_params), result, param_idx);
   }
 
   // get single morphed param value using vst param (if need be)
-  float get(ParamsDelayGetFn get_fn, const MorphParam* morph, int param_idx = 0)
+  float get(ParamsDelayGetFn get_fn, const MorphParam* morph, unsigned int param_idx = 0)
   {
     Array<float, 1> result;
     get(get_fn, morph, result, param_idx);
@@ -393,10 +393,10 @@ public:
   void* _vst_param_idx_focus_cookie;
 
   // access program number
-  int currProgramNum() { return limit_range(curProgram, 0, (int)_program.size() - 1); }
+  int currProgramNum() { return limit_range(curProgram, 0, static_cast<int>(_program.size()) - 1); }
 
   // access current preset
-  BlkFxProgram& currProgram() { return _program[currProgramNum()]; }
+  BlkFxProgram& currProgram() { return _program[static_cast<unsigned int>(currProgramNum())]; }
 
 public: // gui state stuff
   //

@@ -173,7 +173,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   _max_delay_n = _x3_sz - MAX_FFT_SZ - 2048;
 
   // copy presets into the program
-  _program.reserve(/*AudioEffect::*/ getNumPrograms());
+  _program.reserve( static_cast<size_t>(getNumPrograms()));
   _program = g_blk_fx_presets;
   _program.push_back(BlkFxProgram("> reset current <:0.0 0.062745098 0.1098039 0.35"));
 
@@ -278,8 +278,8 @@ const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
 
 void DtBlkFxAudioProcessor::changeProgramName(int index, const juce::String& newName)
 {
-    if(index >= 0 || index < _program.size()){
-        _program[index].setName(newName.toRawUTF8());
+    if(index >= 0 || static_cast<size_t>(index) < _program.size()){
+        _program[static_cast<size_t>(index)].setName(newName.toRawUTF8());
     }
 }
 
@@ -335,8 +335,9 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   // This is here to avoid people getting screaming feedback
   // when they first compile a plugin, but obviously you don't need to keep
   // this code if your algorithm always overwrites all the output channels.
-  for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+  for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i){
     buffer.clear(i, 0, buffer.getNumSamples());
+  }
 
   // This is the place where you'd normally do the guts of your plugin's
   // audio processing...
@@ -766,7 +767,7 @@ void DtBlkFxAudioProcessor::guessFFTLen(int& /*return*/ freq_fft_n, int& /*retur
 
   // get time length based on shoulder fraction
   time_fft_n =
-      (int)((float)freq_fft_n * lin_interp(get(&GetInput, _blk_shoulder_frac_param), 1.0f, .25f));
+      static_cast<int>(static_cast<float>(freq_fft_n) * lin_interp(get(&GetInput, _blk_shoulder_frac_param), 1.0f, .25f));
 
   // is the blk longer than the delay? if so reduce blk length
   if (time_fft_n > delay_n) {
@@ -1188,20 +1189,23 @@ inline void DtBlkFxAudioProcessor::paramsChk()
 // check whether params need processing & update variables used in processing loop
 //
 {
-  if (!_params_need_processing)
+  if (!_params_need_processing){
     return;
+  }
   _params_need_processing = false;
 
   // check whether we should sync with a param
-  if (_params_state == PARAMS_CHK_SYNC)
+  if (_params_state == PARAMS_CHK_SYNC){
     paramsChkSync();
+  }
 
   // find src position of fft blk
   long src_fft_abs = _blk_samp_abs + _next_blk_fwd_n;
 
   // see if we can interpolate
-  if (_params_state == PARAMS_NONINTERP && _params.setOutPos(src_fft_abs))
+  if (_params_state == PARAMS_NONINTERP && _params.setOutPos(src_fft_abs)){
     _params_state = PARAMS_INTERP_OK;
+  }
 
   // number of samples to do fft blk
   _plan = BlkFxParam::getPlan(get(&GetInterp, _fft_len_param));
@@ -1209,7 +1213,7 @@ inline void DtBlkFxAudioProcessor::paramsChk()
 
   // this is how much of the blk we want to process
   _time_fft_n =
-      (int)((float)_freq_fft_n * lin_interp(get(&GetInterp, _blk_shoulder_frac_param), 1.0f, .25f));
+      static_cast<int>(static_cast<float>(_freq_fft_n) * lin_interp(get(&GetInterp, _blk_shoulder_frac_param), 1.0f, .25f));
 
   // center the data to be processed (this will be adjusted if there isn't enough data to fill
   // the blk)
@@ -1730,13 +1734,14 @@ inline void DtBlkFxAudioProcessor::nextBlk()
 
     // find the sample position of the closest sync position before current next blk
     float units = ceilf((_beat_start_abs - next_blk_samp_abs) / beat_sync);
-    long sync_abs = (long)(_beat_start_abs - units * beat_sync);
+    long sync_abs = static_cast<long>(_beat_start_abs - units * beat_sync);
     long sync_fwd = sync_abs - _blk_samp_abs;
 
     // LOG("", "nextBlk, blksync" <<VAR(_next_blk_fwd_n) <<VAR(sync_fwd) <<VAR(_blk_samp_abs)
     // <<VAR(next_blk_samp_abs)<<VAR(beats)<<VAR(sync_abs)<<VAR(overlap_param));
-    if (sync_fwd > _min_blk_fwd_samps && sync_fwd <= _next_blk_fwd_n)
-      _next_blk_fwd_n = sync_fwd;
+    if (sync_fwd > _min_blk_fwd_samps && sync_fwd <= _next_blk_fwd_n) {
+        _next_blk_fwd_n = sync_fwd;
+    }
   }
 
   _params_state = PARAMS_CHK_SYNC;
