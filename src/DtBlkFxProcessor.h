@@ -36,6 +36,12 @@ private:
     //TODO: Is this flag needed?
     bool presetLoadOk = true;
     void LoadPresets(const juce::File& filepath);
+
+
+    //AudioParameters to expose the paramers to juce and brigde it with the new api.
+    // DtBlkFxAudioParameterFloat** params_juce;
+    juce::AudioProcessorValueTreeState paramsJuce;
+
 public:
   CharArray<4096> g_plugin_path;
   enum { MAX_FX = 16, AUDIO_CHANNELS = BlkFxParam::AUDIO_CHANNELS };
@@ -87,8 +93,8 @@ public: // override AudioEffect methods
   //virtual int32_t getChunk(void** data, bool isPreset = false);
   //virtual int32_t setChunk(void* data, int32_t byteSize, bool isPreset = false);
 
-  virtual void setParameter(int32_t index, float value);
-  virtual float getParameter(int32_t index);
+  virtual void setParameter(int32_t index, float value) override;
+  virtual float getParameter(int32_t index) override;
   virtual void getParameterLabel(int32_t index, char* label);
   virtual void getParameterDisplay(int32_t index, char* text);
   virtual void getParameterName(int32_t index, char* text);

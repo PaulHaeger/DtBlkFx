@@ -129,7 +129,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
 #  endif
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
-      )
+      ), paramsJuce(*this, nullptr, "PARAMETERS", BlkFxParam::generateParameterLayout())
 {
   int i;
 
