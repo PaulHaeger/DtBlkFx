@@ -399,7 +399,9 @@ public:
   void* _vst_param_idx_focus_cookie;
 
   // access program number
-  int currProgramNum() { return limit_range(curProgram, 0, static_cast<int>(_program.size()) - 1); }
+  int currProgramNum() {
+      return static_cast<int>(limit_range(static_cast<size_t>(curProgram), 0, _program.size() - 1));
+  }
 
   // access current preset
   BlkFxProgram& currProgram() { return _program[static_cast<unsigned int>(currProgramNum())]; }

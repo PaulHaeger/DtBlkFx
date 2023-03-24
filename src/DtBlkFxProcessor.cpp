@@ -255,8 +255,12 @@ double DtBlkFxAudioProcessor::getTailLengthSeconds() const
 
 int DtBlkFxAudioProcessor::getNumPrograms()
 {
-  return 1; // NB: some hosts don't cope very well if you tell them there are 0 programs,
-            // so this should be at least 1, even if you're not really implementing programs.
+    int p_num = static_cast<int>(_program.size());
+    if (p_num == 0) {
+        //Return 1 since some host cant cope with the Program-number being 0
+        return 1;
+    }
+    return p_num;
 }
 
 int DtBlkFxAudioProcessor::getCurrentProgram()
