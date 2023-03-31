@@ -35,28 +35,30 @@ namespace BlkFxParam {
     //parameter Layout
     inline AudioProcessorValueTreeState::ParameterLayout generateParameterLayout(){
         //Global params
-        AudioProcessorValueTreeState::ParameterLayout params = {
+        AudioProcessorValueTreeState::ParameterLayout params;
+        auto global_group = std::make_unique<AudioProcessorParameterGroup>("GLOBAL", "Global", " | ");
+        global_group->addChild(
                 std::make_unique<AudioParameterFloat>("mix_back", "Mix Back", NormalisableRange<float>(0.f, 1.f), 0.f),
                 std::make_unique<AudioParameterFloat>("delay", "Delay", NormalisableRange<float>(0.f, 1.f), 0.f),
                 std::make_unique<AudioParameterFloat>("fftlen", "FFT Length",  NormalisableRange<float>(0.f, 1.f), 0.f) //TODO: AudioParameterInt would be more fitting, but in the moment its not clear what would need to be changed.
-        };
+        );
         //Construct the groups
         std::vector<std::unique_ptr<AudioProcessorParameterGroup>> subgroups;
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_1", "FX Slot 1", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_2", "FX Slot 2", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_3", "FX Slot 3", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_4", "FX Slot 4", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_5", "FX Slot 5", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_6", "FX Slot 6", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_7", "FX Slot 7", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("fx_8", "FX Slot 8", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_1", "FX Slot 1", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_2", "FX Slot 2", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_3", "FX Slot 3", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_4", "FX Slot 4", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_5", "FX Slot 5", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_6", "FX Slot 6", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_7", "FX Slot 7", " | "));
+        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_8", "FX Slot 8", " | "));
 
         for(auto& subgroup : subgroups){
-            subgroup->addChild( std::make_unique<AudioParameterFloat>("freq_a", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
-                               std::make_unique<AudioParameterFloat>("freq_b", "Frequency B", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>("fx_amp", "Amplitude", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>("fx_type", "Type", NormalisableRange<float>(0.f, 1.f), 0.f), //TODO: AudioParameterInt or AudioParameterChoice would probably be better but same problem as above.
-                               std::make_unique<AudioParameterFloat>("fx_val", "Value", NormalisableRange<float>(0.f, 1.f), 0.f)
+            subgroup->addChild( std::make_unique<AudioParameterFloat>("FREQ_a", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
+                               std::make_unique<AudioParameterFloat>("FREQ_B", "Frequency B", NormalisableRange<float>(0.f, 1.f), 1.f),
+                               std::make_unique<AudioParameterFloat>("FX_AMP", "Amplitude", NormalisableRange<float>(0.f, 1.f), 1.f),
+                               std::make_unique<AudioParameterFloat>("FX_TYPE", "Type", NormalisableRange<float>(0.f, 1.f), 0.f), //TODO: AudioParameterInt or AudioParameterChoice would probably be better but same problem as above.
+                               std::make_unique<AudioParameterFloat>("FX_VAL", "Value", NormalisableRange<float>(0.f, 1.f), 0.f)
                            );
         }
 
