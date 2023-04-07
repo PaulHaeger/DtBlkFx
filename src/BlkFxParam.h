@@ -28,6 +28,7 @@ General Public License for more details.
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 #include <map>
+#include <stdexcept>
 
 // namespace to hold stuff to do with vst params used in dt blkfx
 namespace BlkFxParam {
@@ -68,40 +69,7 @@ namespace BlkFxParam {
     } constants;
 
     //parameter Layout
-    inline AudioProcessorValueTreeState::ParameterLayout generateParameterLayout(){
-        //Global params
-        AudioProcessorValueTreeState::ParameterLayout params;
-        auto global_group = std::make_unique<AudioProcessorParameterGroup>("GLOBAL", "Global", " | ");
-        global_group->addChild(
-                std::make_unique<AudioParameterFloat>("MIX_BACK", "Mix Back", NormalisableRange<float>(0.f, 1.f), 0.f),
-                std::make_unique<AudioParameterFloat>("DELAY", "Delay", NormalisableRange<float>(0.f, 1.f), 0.f),
-                std::make_unique<AudioParameterFloat>("FFTLEN", "FFT Length",  NormalisableRange<float>(0.f, 1.f), 0.f) //TODO: AudioParameterInt would be more fitting, but in the moment its not clear what would need to be changed.
-        );
-        //Construct the groups
-        std::vector<std::unique_ptr<AudioProcessorParameterGroup>> subgroups;
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_1", "FX Slot 1", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_2", "FX Slot 2", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_3", "FX Slot 3", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_4", "FX Slot 4", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_5", "FX Slot 5", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_6", "FX Slot 6", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_7", "FX Slot 7", " | "));
-        subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_8", "FX Slot 8", " | "));
-
-        for(auto& subgroup : subgroups){
-            auto prefix = subgroup->getID();
-            subgroup->addChild(std::make_unique<AudioParameterFloat>(prefix + "_FREQ_A", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
-                               std::make_unique<AudioParameterFloat>(prefix + "_FREQ_B", "Frequency B", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>(prefix + "_FX_AMP", "Amplitude", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>(prefix + "_FX_TYPE", "Type", NormalisableRange<float>(0.f, 1.f), 0.f), //TODO: AudioParameterInt or AudioParameterChoice would probably be better but same problem as above.
-                               std::make_unique<AudioParameterFloat>(prefix + "_FX_VAL", "Value", NormalisableRange<float>(0.f, 1.f), 0.f)
-                           );
-        }
-
-        params.add(subgroups.begin(), subgroups.end());
-
-        return params;
-    };
+    AudioProcessorValueTreeState::ParameterLayout generateParameterLayout();
 
     const std::array<juce::Identifier, TOTAL_NUM> paramsIds = {
         /*-----Global Parameters-------*/
@@ -157,6 +125,75 @@ namespace BlkFxParam {
         Identifier("FX_8_FX_TYPE"),
         Identifier("FX_8_FX_VAL"),
     };
+
+    const Identifier idNodeProgram("PROGRAM");
+    const Identifier idProgName("PROGRAMNAME");
+    const Identifier idNodeGlobal("GLOBAL");
+    const Identifier idNodeFX1("FX1");
+    const Identifier idNodeFX2("FX2");
+    const Identifier idNodeFX3("FX3");
+    const Identifier idNodeFX4("FX4");
+    const Identifier idNodeFX5("FX5");
+    const Identifier idNodeFX6("FX6");
+    const Identifier idNodeFX7("FX7");
+    const Identifier idNodeFX8("FX8");
+
+    inline const Identifier& getGroupForIndex(unsigned int index){
+        //Global parameters
+        if(index >= TOTAL_NUM){
+            throw std::out_of_range("Index higher than number of parameters.");
+        }
+        if(index < NUM_GLOBAL_PARAMS){
+            return idNodeGlobal;
+        }
+        auto shifted = index - NUM_GLOBAL_PARAMS;
+        auto fx_slot = shifted % NUM_FX_PARAMS;
+        switch(fx_slot){
+            case 0:
+                return idNodeFX1;
+            case 1:
+                return idNodeFX2;
+            case 2:
+                return idNodeFX3;
+            case 3:
+                return idNodeFX4;
+            case 4:
+                return idNodeFX5;
+            case 5:
+                return idNodeFX6;
+            case 6:
+                return idNodeFX7;
+            case 7:
+                return idNodeFX8;
+        }
+
+        //This should be unreachable
+        throw std::runtime_error("This should be unreachable!");
+    }
+
+    /* \brief Generates a ValueTree that can be used to swap APVTS states.
+     *
+     * \note This Function will return an invalid tree if the APVTS has an invalid tree.
+     *
+     * \param[in] apvts The APVTS the structure will be based of. The resulting tree can be used
+     *     for a swap.
+     *
+     * \return The generated ValueTree.
+     */
+    ValueTree generateValueTree(AudioProcessorValueTreeState& apvts);
+
+    /* \brief Loads the data from the old format.
+     * This Function uses a reference to the apvts to construct the appropiate
+     * ValueTree structure. Then it reads the data and writes it into the structure.
+     * Upon error an invalid tree will be returned.
+     *
+     * \param[in] apvts ValueTreeState used to construct the tree from.
+     * \param[in] stringData The string containing the data.
+     *
+     * \return The read ValueTree
+     */
+    ValueTree loadFromLegacyFormat(AudioProcessorValueTreeState& apvts, const String& stingData);
+
 
     inline std::map<Identifier, unsigned int> createIdIndexMap() {
         std::map<Identifier, unsigned int> idMap;

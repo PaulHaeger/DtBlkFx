@@ -89,6 +89,7 @@ target_sources(DtBlkFx PRIVATE
     src/sweep3_coeff.cpp
     src/sweep4_coeff.cpp
     src/sweep5_coeff.cpp
+    src/BlkFxParam.cpp
 )
 
 # `target_compile_definitions` adds some preprocessor definitions to our target. In a Projucer
