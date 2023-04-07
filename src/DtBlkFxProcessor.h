@@ -1,5 +1,4 @@
-/*
- * See LICENSE.md for copyright and licensing information.
+/* * See LICENSE.md for copyright and licensing information.
  *
  * This file is part of DtBlkFx.
  *
@@ -32,15 +31,31 @@
 
 class DtBlkFxAudioProcessor : public juce::AudioProcessor {
 private:
-    std::vector<VstProgram<BlkFxParam::TOTAL_NUM>> g_blk_fx_presets;
+    std::vector<juce::ValueTree> g_blk_fx_presets;
     //TODO: Is this flag needed?
     bool presetLoadOk = true;
     void LoadPresets(const juce::File& filepath);
 
 
-    //AudioParameters to expose the paramers to juce and brigde it with the new api.
-    // DtBlkFxAudioParameterFloat** params_juce;
+
+    void initJuceParams();
+    void parameterUpdated(const juce::String& parameterID, float newValue);
+
+    class ParamUpdateListener : public juce::AudioProcessorValueTreeState::Listener{
+        DtBlkFxAudioProcessor* parent;
+
+        public:
+        ParamUpdateListener(DtBlkFxAudioProcessor* parent)
+            :parent(parent) {}
+
+        void  parameterChanged (const juce::String &parameterID, float newValue) override {
+            parent->parameterUpdated(parameterID, newValue);
+        }
+    };
+
+    //Object for juce parameters
     juce::AudioProcessorValueTreeState paramsJuce;
+    ParamUpdateListener paramsListener;
 
 public:
   CharArray<4096> g_plugin_path;
@@ -85,32 +100,12 @@ public: // override AudioEffect methods
   virtual void processReplacing(const float** inputs, float** outputs, int32_t sampleFrames);
   virtual void setBlockSize(int32_t samps);
 
-  virtual void setProgram(int32_t program);
-  virtual void setProgramName(char* name) { currProgram().setName(name); }
-  virtual void getProgramName(char* name) { strcpy(name, currProgram().getName()); }
-  virtual bool getProgramNameIndexed(int32_t category, int32_t index, char* text);
-
-  //virtual int32_t getChunk(void** data, bool isPreset = false);
-  //virtual int32_t setChunk(void* data, int32_t byteSize, bool isPreset = false);
-
-  virtual void setParameter(int32_t index, float value) override;
-  virtual float getParameter(int32_t index) override;
-  virtual void getParameterLabel(int32_t index, char* label);
-  virtual void getParameterDisplay(int32_t index, char* text);
-  virtual void getParameterName(int32_t index, char* text);
-
   virtual void resume();
   virtual void suspend();
 
-  virtual bool getEffectName(char* name);
-  virtual bool getVendorString(char* text);
-  virtual bool getProductString(char* text);
-  virtual int32_t getVendorVersion() { return 1200; }
+  unsigned int curProgram;
 
-  //virtual VstPlugCategory getPlugCategory() { return kPlugCategEffect; }
-    unsigned int curProgram;
-
-public: 
+public:
   // cast the editor to our gui
 //  Gui* gui() { return (Gui*)/*AudioEffect::*/ editor; }
 
@@ -307,8 +302,11 @@ public: // polled variables that are updated periodically
 
 public:
   // presets are stored here (and can be edited)
+  //TODO: Replace with value tree
   typedef VstProgram<BlkFxParam::TOTAL_NUM> BlkFxProgram;
-  std::vector<BlkFxProgram> _program;
+  //std::vector<BlkFxProgram> _program;
+  std::vector<juce::ValueTree> _program;
+  void applyProgramToValueTree(const BlkFxProgram& program);
 
   // params are delayed by the same amount of time as the audio
   ParamsDelay _params;
@@ -398,13 +396,15 @@ public:
   VstParamIdx _vst_param_idx_focus;
   void* _vst_param_idx_focus_cookie;
 
-  // access program number
-  int currProgramNum() {
-      return static_cast<int>(limit_range(static_cast<size_t>(curProgram), 0, _program.size() - 1));
-  }
 
+  /* \brief Gets the Factory Preset for a Program.
+   * \param[in] index Index of the program.
+   */
+  juce::ValueTree getFactoryProgramState(unsigned int index){
+    return g_blk_fx_presets[index];
+  }
   // access current preset
-  BlkFxProgram& currProgram() { return _program[static_cast<unsigned int>(currProgramNum())]; }
+  juce::ValueTree getCurrentProgamState() { return _program[static_cast<unsigned int>(getCurrentProgram())]; }
 
 public: // gui state stuff
   //
@@ -428,7 +428,7 @@ inline long DtBlkFxAudioProcessor::getDelaySamps(const BlkFxParam::Delay& delay)
   else
     samps *= _samps_per_beat;
 
-  return limit_range((long)samps + _initial_delay,
+  return limit_range(static_cast<long>(samps) + _initial_delay,
                      100,         // arbitrary minimum size
                      _max_delay_n // max delay
   );

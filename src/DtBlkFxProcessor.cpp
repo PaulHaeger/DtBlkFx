@@ -106,10 +106,14 @@ void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
         juce::FileLogger::writeToLog(juce::String("Failure loading presets: '") + filepath.getFullPathName() + "' could not be opened.");
 
       g_blk_fx_presets.resize(20);
-      g_blk_fx_presets[0].name << "file not found";
+      g_blk_fx_presets[0].getChildWithName(BlkFxParam::idNodeProgram)
+                         .setProperty(BlkFxParam::idProgName, "file not found", nullptr);
       for (size_t i = 1; i < g_blk_fx_presets.size(); ++i){
-        g_blk_fx_presets[i].name << static_cast<int>(i) << " user";
+          juce::String presetName = juce::String(i) + " user";
+        g_blk_fx_presets[i].getChildWithName(BlkFxParam::idNodeProgram)
+                           .setProperty(BlkFxParam::idProgName, presetName, nullptr);
       }
+
       presetLoadOk = false;
 
       return;
@@ -117,8 +121,50 @@ void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
 
     while(!f.isExhausted()) {
         juce::String line =  f.readNextLine();
-        g_blk_fx_presets.push_back(VstProgram<BlkFxParam::TOTAL_NUM>(line.toRawUTF8()));
+        g_blk_fx_presets.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, line));
     }
+}
+
+void DtBlkFxAudioProcessor::initJuceParams(){
+    for(auto& paramId : BlkFxParam::paramsIds){
+        paramsJuce.addParameterListener(paramId, &paramsListener);
+    }
+}
+
+void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, float newValue) {
+
+  auto it = BlkFxParam::idIndexMap.find(parameterId);
+  // safety
+  if (it == BlkFxParam::idIndexMap.end()){
+    return;
+  }
+
+  unsigned int index = it->second;
+
+
+  ScopeCriticalSection scs(_protect);
+
+
+// write param to the file
+#ifdef WR_PARAM
+  f_param.seekp(index * 4);
+  f_param.write((char*)&value, 4);
+  f_param.flush();
+#endif
+
+  if (_params.put(_curr_samp_abs, index, newValue) /*already exists*/ == false) {
+    // this is a new time, update params
+    //TODO: pollUpdate will crash here, ideally find another way
+    //pollUpdate(/*force*/ true);
+
+    // trigger sample processing loop to check params again
+    if (_params_state != PARAMS_INTERP_OK)
+      _params_need_processing = true;
+  }
+
+  //TODO: GUI Connection
+  //if(gui())
+  // gui()->setParameter(index, value);
 }
 
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
@@ -129,7 +175,8 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
 #  endif
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
-      ), paramsJuce(*this, nullptr, "PARAMETERS", BlkFxParam::generateParameterLayout())
+      ), paramsJuce(*this, nullptr, "PARAMETERS", BlkFxParam::generateParameterLayout()),
+    paramsListener(this)
 {
   int i;
 
@@ -137,6 +184,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
 
   _vst_param_idx_focus = -1;
 
+  initJuceParams();
   _params.init(/*n params*/ BlkFxParam::TOTAL_NUM, /*delay length*/ 140);
 
   // set GUI if we've loaded images ok
@@ -175,7 +223,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   // copy presets into the program
   _program.reserve( static_cast<size_t>(getNumPrograms()));
   _program = g_blk_fx_presets;
-  _program.push_back(BlkFxProgram("> reset current <:0.0 0.062745098 0.1098039 0.35"));
+  _program.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, "> reset current <:0.0 0.062745098 0.1098039 0.35"));
 
   //TODO: Is setting input/output channel count necessary in JUCE
   //setNumInputs(AUDIO_CHANNELS);
@@ -265,25 +313,50 @@ int DtBlkFxAudioProcessor::getNumPrograms()
 
 int DtBlkFxAudioProcessor::getCurrentProgram()
 {
-  return currProgramNum();
+  return static_cast<int>(limit_range(static_cast<size_t>(curProgram), 0, _program.size() - 1));
 }
 
 void DtBlkFxAudioProcessor::setCurrentProgram(int index)
 {
-    setProgram(index);
+  juce::Logger::writeToLog("DtBlkFxProcessor::setCurrentProgram(" + juce::String(index) + ")");
+
+  // normal case
+  if (index >= 0 && index < static_cast<int>(_program.size())) {
+      unsigned int oldProg = curProgram;
+      curProgram = static_cast<unsigned int>(index);
+      //Save old prog
+      _program[oldProg] = paramsJuce.copyState();
+      paramsJuce.replaceState(_program[curProgram]);
+  }else {
+    // check for the special "reset current program"
+    // reset current program to defaults
+    if (idx_within(getNumPrograms(), g_blk_fx_presets)){
+      paramsJuce.replaceState(getFactoryProgramState(static_cast<unsigned int>(getCurrentProgram())));
+    }
+  }
+
+  // update all params out of the program
+  //applyProgramToValueTree(getCurrentBlkFxProgram());
+  //TODO: Does the listener callback need to be called?
 }
 
 const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
 {
-  char buf[128]; //TODO: Refactor!
-  getProgramNameIndexed(0, index, buf);
-  return juce::String(buf);
+    auto subTree = getCurrentProgamState().getChildWithName(BlkFxParam::idNodeProgram);
+    return subTree[BlkFxParam::idProgName];
 }
 
 void DtBlkFxAudioProcessor::changeProgramName(int index, const juce::String& newName)
 {
     if(index >= 0 || static_cast<size_t>(index) < _program.size()){
-        _program[static_cast<size_t>(index)].setName(newName.toRawUTF8());
+        auto pt = _program[static_cast<size_t>(index)];
+        pt.getChildWithName(BlkFxParam::idNodeProgram).setProperty(BlkFxParam::idProgName, newName, nullptr);
+        if(getCurrentProgram() == index){
+            //Propagate change to APVTS as well to avoid it being overwritten again when
+            //the program is saved again.
+            paramsJuce.state.getChildWithName(BlkFxParam::idNodeProgram)
+                            .setProperty(BlkFxParam::idProgName, newName, nullptr);
+        }
     }
 }
 
@@ -660,42 +733,6 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
 ***/
 
 //-------------------------------------------------------------------------------------------------
-void DtBlkFxAudioProcessor::setProgram(int32_t num)
-// virtual, override AudioEffect
-// called by vst-host to set a program
-{
-  LOG("", "DtBlkFxProcessor::setProgram" << VAR(num));
-
-  // normal case
-  if (num < static_cast<int32_t>(_program.size()) - 1){
-      //TODO: What to do here?
-    //juce::AudioProcessor::setCurrentProgram(num);
-  }else {
-    // check for the special "reset current program"
-    // reset current program to defaults
-    if (idx_within(currProgramNum(), g_blk_fx_presets))
-      currProgram() = g_blk_fx_presets[currProgramNum()];
-  }
-
-  // update all params out of the program
-  for (int i = 0; i < BlkFxParam::TOTAL_NUM; i++)
-    setParameter(i, currProgram().params[i]);
-}
-
-//-------------------------------------------------------------------------------------------------
-bool DtBlkFxAudioProcessor::getProgramNameIndexed(int32_t category, int32_t index, char* text)
-// virtual, override AudioEffect
-// called by vst-host to get the name of a program by category
-{
-  LOG("", "DtBlkFxProcessor::getProgramNameIndexed" << VAR(category) << VAR(index) << VAR(_program.size()));
-  if (index < 0 || index >= static_cast<int>(_program.size())){
-    return false;
-  }
-  strcpy(text, _program[index].name);
-  return true;
-}
-
-//-------------------------------------------------------------------------------------------------
 void DtBlkFxAudioProcessor::resume()
 // virtual, override AudioEffect
 // called by vst-host to get ready to start processing
@@ -843,254 +880,6 @@ inline void DtBlkFxAudioProcessor::pollUpdate(bool force)
 
   // min number of samps we can mv fwd to get the next blk
   _min_blk_fwd_samps = max(64L, static_cast<long>(samps_per_tick));
-}
-
-//-------------------------------------------------------------------------------------------------
-void DtBlkFxAudioProcessor::setParameter(int32_t index, float value)
-// virtual, override AudioEffect
-// called by vst-host to set param
-{
-  // safety
-  if (index < 0 || index >= BlkFxParam::TOTAL_NUM)
-    return;
-
-  // safety
-  value = limit_range(value, 0.0f, 1.0f);
-
-  //
-  ScopeCriticalSection scs(_protect);
-
-  // copy change into the current program
-  currProgram().params[index] = value;
-
-// write param to the file
-#ifdef WR_PARAM
-  f_param.seekp(index * 4);
-  f_param.write((char*)&value, 4);
-  f_param.flush();
-#endif
-
-  if (_params.put(_curr_samp_abs, index, value) /*already exists*/ == false) {
-    // this is a new time, update params
-    pollUpdate(/*force*/ true);
-
-    // trigger sample processing loop to check params again
-    if (_params_state != PARAMS_INTERP_OK)
-      _params_need_processing = true;
-  }
-
-  //TODO: GUI Connection
-  //if(gui())
-  // gui()->setParameter(index, value);
-}
-
-//-------------------------------------------------------------------------------------------------
-float DtBlkFxAudioProcessor::getParameter(int32_t index)
-// virtual, override AudioEffect
-// called by vst-host to get param value
-{
-  using namespace BlkFxParam;
-  if (index < 0 || index >= TOTAL_NUM)
-    return 0.0f;
-  // use most recently input value
-  return _params.getInputNoForced(index);
-}
-
-//-------------------------------------------------------------------------------------------------
-void DtBlkFxAudioProcessor::getParameterName(int32_t index, char* label)
-// virtual, override AudioEffect
-// called by vst-host to get name of param
-{
-  //CharRng str(label, kVstMaxParamStrLen);
-  CharRng str(label, 64);
-  using namespace BlkFxParam;
-
-  // first 10 params params can be used as morph
-  // if(index < 10) label += sprintf(label, "%d/", index);
-
-  SplitParamNum p(index);
-  // try global params
-  switch (p.glob_param) {
-    case MIX_BACK:
-      str << "Mixbk";
-      return;
-    case DELAY:
-      str << "Delay";
-      return;
-    case FFT_LEN:
-      str << "BlkSz";
-      return;
-    case OVERLAP:
-      str << "Ovrlp";
-      return;
-  }
-  // try fx set
-  switch (p.fx_param) {
-    case FX_FREQ_A:
-      str << p.fx_set << ".FrqA";
-      return;
-    case FX_FREQ_B:
-      str << p.fx_set << ".FrqB";
-      return;
-    case FX_AMP:
-      str << p.fx_set << ".Amp";
-      return;
-    case FX_TYPE:
-      str << p.fx_set << ".Fx";
-      return;
-    case FX_VAL:
-      str << p.fx_set << ".Val";
-      return;
-  }
-}
-
-//-------------------------------------------------------------------------------------------------
-void DtBlkFxAudioProcessor::getParameterLabel(int32_t index, char* label)
-// virtual, override AudioEffect
-// called by vst-host to get param label
-{
-  //CharRng str(label, kVstMaxParamStrLen);
-  CharRng str(label, 64);
-  str << "";
-}
-
-//-------------------------------------------------------------------------------------------------
-bool /*true=printed*/ DtBlkFxAudioProcessor::getParamDisplayGlobal(BlkFxParam::SplitParamNum& p, float v,
-                                                     CharRng text)
-{
-  using namespace BlkFxParam;
-
-  // see if index belongs to the global params
-  switch (p.glob_param) {
-    case MIX_BACK: {
-      bool printed = false;
-      if (_pwr_match_param.vstParamIdx() == MIX_BACK) {
-        text = text << (_pwr_match_param(v) > 0.5f ? "match" : "filter");
-        printed = true;
-      }
-      if (_mixback_param.vstParamIdx() == MIX_BACK) {
-        text << (printed ? " " : "") << spr_percent(_mixback_param(v));
-        printed = true;
-      }
-      return printed;
-    }
-
-    case DELAY: {
-      if (_delay_param.vstParamIdx() != DELAY)
-        return false;
-
-      BlkFxParam::Delay delay(_delay_param(v));
-      float delay_samps = (float)getDelaySamps(delay) - _initial_delay;
-      if (delay.getUnits() == delay.BEATS)
-        text << sprf("%.2f beats", delay_samps / getSampsPerBeat());
-      else
-        text << sprnum(delay_samps / getSampleRate()) << "sec";
-      return true;
-    }
-    case FFT_LEN: {
-      if (_fft_len_param.vstParamIdx() != FFT_LEN)
-        return false;
-
-      int fft_len, time_len;
-      guessFFTLen(/*return*/ fft_len, /*return*/ time_len);
-
-      // determine blk size in seconds
-      float sec = fft_len / getSampleRate();
-
-      // print blk size in seconds or msec
-      text << sprnum(sec) << "sec";
-      return true;
-    }
-
-    case OVERLAP: {
-      bool printed = false;
-      if (_beat_sync_param.vstParamIdx() == OVERLAP && _beat_sync_param(v) > 0.5f ||
-          _param_sync_param.vstParamIdx() == OVERLAP && _param_sync_param(v) > 0.5f) {
-        text = text << "sync";
-        printed = true;
-      }
-      if (_overlap_param.vstParamIdx() == OVERLAP) {
-        int fft_len, time_len;
-        guessFFTLen(/*return*/ fft_len, /*return*/ time_len);
-        long fwd_n = getBlkShiftFwd(_overlap_param(v), time_len);
-        float overlap = 1.0f - ((float)fwd_n / (float)time_len);
-
-        text << (printed ? " " : "") << spr_percent(overlap);
-        printed = true;
-      }
-      return printed;
-    }
-  }
-  return false; // param not printed
-}
-
-//-------------------------------------------------------------------------------------------------
-void DtBlkFxAudioProcessor::getParameterDisplay(int32_t index, char* text)
-// virtual, override AudioEffect
-// called by vst-host to convert a param to text
-{
-  // CharRng str(text, kVstMaxParamStrLen); // surely no one only gives us 8 chars??
-  CharRng str(text, /*max len inc. zero*/ 12);
-
-  float v = _params.getInput(index);
-  BlkFxParam::SplitParamNum p(index);
-
-  if (p.ok) {
-    if (getParamDisplayGlobal(p, v, str))
-      return;
-    if (p.fx_set >= 0 && _fx1_0[p.fx_set].getParamDisplay(p, v, str))
-      return;
-  }
-  // otherwise morph mode, so print param as a percentage
-  str << spr_percent(v);
-}
-
-//-------------------------------------------------------------------------------------------------
-bool DtBlkFxAudioProcessor::getEffectName(char* name)
-// virtual, override AudioEffect
-// called by vst-host to return name of effect
-{
-  LOG("", "DtBlkFxProcessor::getEffectName");
-
-  //CharRng(name, kVstMaxEffectNameLen)
-  CharRng(name, 32) << "DTBlkFx"
-#ifdef STEREO
-                                         "S"
-#endif
-#ifdef _DEBUG
-                                         "Dbg"
-#endif
-      ;
-  return true;
-}
-
-//-------------------------------------------------------------------------------------------------
-bool DtBlkFxAudioProcessor::getProductString(char* text)
-// virtual, override AudioEffect
-// called by vst-host to get product string
-{
-  LOG("", "DtBlkFxProcessor::getProductString");
-  //CharRng(text, kVstMaxEffectNameLen) << "DTBlkFx"
-  CharRng(text, 32) << "DTBlkFx"
-#ifdef STEREO
-                                         "S"
-#endif
-#ifdef _DEBUG
-                                         "Dbg"
-#endif
-      ;
-  return true;
-}
-
-//-------------------------------------------------------------------------------------------------
-bool DtBlkFxAudioProcessor::getVendorString(char* text)
-// virtual, override AudioEffect
-// called by vst-host to get vendor string
-{
-  LOG("", "DtBlkFxProcessor::getVendorString");
-  //CharRng(text, kVstMaxVendorStrLen) << "darrell";
-  CharRng(text, 32) << "darrell";
-  return true;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1484,10 +1273,12 @@ inline void DtBlkFxAudioProcessor::procFFT()
 int i;
 
 // run all of the 1.0 effects (collect params first & then process)
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++)
-_fx1_0[i].prepare();
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++)
-_fx1_0[i].process();
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
+    _fx1_0[i].prepare();
+}
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
+    _fx1_0[i].process();
+}
 
 // power match amount
 float pwr_match = get(&GetInterp, _pwr_match_param);
@@ -1508,7 +1299,7 @@ if (pwr_scale > 1e30)
 if (pwr_scale < 1e-30)
   pwr_scale = 0.0f; // too small (or worse, negative)
 
-_chan[i].out_pwr_scale = lin_interp(pwr_match, 1.0f, (float)pwr_scale);
+_chan[i].out_pwr_scale = lin_interp(pwr_match, 1.0f, static_cast<float>(pwr_scale));
 _chan[i].out_scale = sqrtf(_chan[i].out_pwr_scale);
 }
 }
