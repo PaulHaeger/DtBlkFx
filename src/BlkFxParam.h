@@ -76,6 +76,7 @@ namespace BlkFxParam {
         Identifier("MIX_BACK"),
         Identifier("DELAY"),
         Identifier("FFTLEN"),
+        Identifier("OVERLAP"),
         /*-----FX_1 Parameters---------*/
         Identifier("FX_1_FREQ_A"),
         Identifier("FX_1_FREQ_B"),

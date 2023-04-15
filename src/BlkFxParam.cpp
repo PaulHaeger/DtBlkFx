@@ -11,8 +11,10 @@ namespace BlkFxParam
         global_group->addChild(
                 std::make_unique<AudioParameterFloat>("MIX_BACK", "Mix Back", NormalisableRange<float>(0.f, 1.f), 0.f),
                 std::make_unique<AudioParameterFloat>("DELAY", "Delay", NormalisableRange<float>(0.f, 1.f), 0.f),
-                std::make_unique<AudioParameterFloat>("FFTLEN", "FFT Length",  NormalisableRange<float>(0.f, 1.f), 0.f) //TODO: AudioParameterInt would be more fitting, but in the moment its not clear what would need to be changed.
+                std::make_unique<AudioParameterFloat>("FFTLEN", "FFT Length",  NormalisableRange<float>(0.f, 1.f), 0.f), //TODO: AudioParameterInt would be more fitting, but in the moment its not clear what would need to be changed.
+                std::make_unique<AudioParameterFloat>("OVERLAP", "Overlap",  NormalisableRange<float>(0.f, 1.f), 0.f)
         );
+        params.add(std::move(global_group));
         //Construct the groups
         std::vector<std::unique_ptr<AudioProcessorParameterGroup>> subgroups;
         subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_1", "FX Slot 1", " | "));
@@ -78,7 +80,7 @@ namespace BlkFxParam
 
                 //Find the correct property
                 auto groupId = getGroupForIndex(i);
-                auto subTree = stateTree.getChildWithName(groupId);
+                auto subTree = stateTree.getOrCreateChildWithName(groupId, nullptr);
                 //set the new value
                 subTree.setProperty(paramsIds[i], value, nullptr);
             }
