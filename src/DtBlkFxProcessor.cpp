@@ -106,11 +106,13 @@ void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
         juce::FileLogger::writeToLog(juce::String("Failure loading presets: '") + filepath.getFullPathName() + "' could not be opened.");
 
       g_blk_fx_presets.resize(20);
+      g_blk_fx_presets[0] = BlkFxParam::generateValueTree(paramsJuce);
       g_blk_fx_presets[0].getChildWithName(BlkFxParam::idNodeProgram)
                          .setProperty(BlkFxParam::idProgName, "file not found", nullptr);
       for (size_t i = 1; i < g_blk_fx_presets.size(); ++i){
           juce::String presetName = juce::String(i) + " user";
-        g_blk_fx_presets[i].getChildWithName(BlkFxParam::idNodeProgram)
+          g_blk_fx_presets[i] = BlkFxParam::generateValueTree(paramsJuce);
+          g_blk_fx_presets[i].getChildWithName(BlkFxParam::idNodeProgram)
                            .setProperty(BlkFxParam::idProgName, presetName, nullptr);
       }
 
@@ -153,9 +155,7 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
 #endif
 
   if (_params.put(_curr_samp_abs, index, newValue) /*already exists*/ == false) {
-    // this is a new time, update params
-    //TODO: pollUpdate will crash here, ideally find another way
-    //pollUpdate(/*force*/ true);
+    pollUpdate(/*force*/ true);
 
     // trigger sample processing loop to check params again
     if (_params_state != PARAMS_INTERP_OK)
@@ -165,6 +165,14 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
   //TODO: GUI Connection
   //if(gui())
   // gui()->setParameter(index, value);
+}
+
+void DtBlkFxAudioProcessor::updateAllParameters(){
+    for(size_t i = 0; i < BlkFxParam::paramsIds.size(); ++i){
+        parameterUpdated(BlkFxParam::paramsIds[i].toString(),
+                         paramsJuce.getRawParameterValue(BlkFxParam::paramsIds[i])->load()
+                         );
+    }
 }
 
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
@@ -191,6 +199,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   // TODO: Remove old gui comments
   //if (GlobalInitOk())
   //  setEditor(new Gui(this));
+
 
   //Load Presets
   //TODO: A binary resource might be more appropiate?
@@ -222,7 +231,10 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
 
   // copy presets into the program
   _program.reserve( static_cast<size_t>(getNumPrograms()));
-  _program = g_blk_fx_presets;
+  //Deep Copy the trees
+  for(auto tree : g_blk_fx_presets){
+    _program.push_back(tree.createCopy());
+  }
   _program.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, "> reset current <:0.0 0.062745098 0.1098039 0.35"));
 
   //TODO: Is setting input/output channel count necessary in JUCE
@@ -258,6 +270,8 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   _params.put(/*samp abs*/ 0, BlkFxParam::DELAY, 16.0f / 255.0f);
   _params.put(/*samp abs*/ 0, BlkFxParam::FFT_LEN, BlkFxParam::getFFTLenParam(16));
   _params.put(/*samp abs*/ 0, BlkFxParam::OVERLAP, 0.35f);
+
+  CreateFFTWfPlans();
 
   resume(); // flush buffer
 }
@@ -326,7 +340,9 @@ void DtBlkFxAudioProcessor::setCurrentProgram(int index)
       curProgram = static_cast<unsigned int>(index);
       //Save old prog
       _program[oldProg] = paramsJuce.copyState();
+      juce::Logger::writeToLog("Saved old state to program list");
       paramsJuce.replaceState(_program[curProgram]);
+      juce::Logger::writeToLog("Replaced Program State");
   }else {
     // check for the special "reset current program"
     // reset current program to defaults
@@ -336,8 +352,7 @@ void DtBlkFxAudioProcessor::setCurrentProgram(int index)
   }
 
   // update all params out of the program
-  //applyProgramToValueTree(getCurrentBlkFxProgram());
-  //TODO: Does the listener callback need to be called?
+  updateAllParameters();
 }
 
 const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
@@ -416,6 +431,11 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     buffer.clear(i, 0, buffer.getNumSamples());
   }
 
+  //TODO: Remove the copying, Buffer should idealy be cleared if necessary by the processing
+  juce::AudioBuffer<float> testcopy;
+  testcopy.makeCopyOf(buffer);
+  buffer.clear();
+
   // This is the place where you'd normally do the guts of your plugin's
   // audio processing...
   // Make sure to reset the state if your inner loop is processing
@@ -423,7 +443,7 @@ void DtBlkFxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   // Alternatively, you can process the samples with the channels
   // interleaved by keeping the same state.
 
-  process(buffer.getArrayOfReadPointers(), buffer.getArrayOfWritePointers(), buffer.getNumSamples());
+  process(testcopy.getArrayOfReadPointers(), buffer.getArrayOfWritePointers(), buffer.getNumSamples());
 }
 
 bool DtBlkFxAudioProcessor::hasEditor() const
@@ -846,18 +866,14 @@ inline void DtBlkFxAudioProcessor::pollUpdate(bool force)
   if (!force && _curr_samp_abs - _prev_poll_abs < _samps_per_poll)
     return;
 
-  // ask host for tempo
-  //TODO: MAKE SURE THIS ONLY USED IN THE PROCESS BLOCK METHOD CONTEXT
-  const juce::AudioPlayHead* playhead = getPlayHead();
-  auto pi = playhead->getPosition();
 
-  if (pi.hasValue()) {
-      if(pi->getBpm().hasValue()){
-        _samps_per_beat = static_cast<float>(60.f * getSampleRate() / *(pi->getBpm()));
+  if (lastPi.hasValue()) {
+      if(lastPi->getBpm().hasValue()){
+        _samps_per_beat = static_cast<float>(60.f * getSampleRate() / *(lastPi->getBpm()));
       }
 
-      if(pi->getPpqPosition().hasValue()){
-          float ppq_pos = static_cast<float>(*(pi->getPpqPosition()));
+      if(lastPi->getPpqPosition().hasValue()){
+          float ppq_pos = static_cast<float>(*(lastPi->getPpqPosition()));
           float ppq_frac = ppq_pos - floorf(ppq_pos);
 
     // work out sample position of the start of the current beat
@@ -1587,6 +1603,9 @@ inline void DtBlkFxAudioProcessor::_process(const float* const* in_buf, long buf
 {
   ScopeCriticalSection scs(_protect);
 
+  //Update Playhead Info
+  const juce::AudioPlayHead* playhead = getPlayHead();
+  lastPi = playhead->getPosition();
   pollUpdate(/*force*/ false);
 
   copyInBuf(in_buf, buf_n);

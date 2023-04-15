@@ -133,7 +133,7 @@ struct PCopyOut
 // x => dst
 {
   float* dst;
-  PCopyOut(float* dst_ = NULL) { dst = dst_; }
+  PCopyOut(float* dst_ = nullptr) { dst = dst_; }
   void process(float* src, long n)
   {
     memcpy(dst, src, n * sizeof(float));
@@ -147,7 +147,7 @@ struct PAddOut
 // add FIFO data "x" to dst (non-FIFO buffer)
 // x + dst => dst
 {
-  PAddOut(float* dst_ = NULL) { dst = dst_; }
+  PAddOut(float* dst_ = nullptr) { dst = dst_; }
   void process(float* x, long n)
   {
     float* xe = x + n;

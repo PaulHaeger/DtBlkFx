@@ -40,6 +40,7 @@ private:
 
     void initJuceParams();
     void parameterUpdated(const juce::String& parameterID, float newValue);
+    void updateAllParameters();
 
     class ParamUpdateListener : public juce::AudioProcessorValueTreeState::Listener{
         DtBlkFxAudioProcessor* parent;
@@ -56,6 +57,8 @@ private:
     //Object for juce parameters
     juce::AudioProcessorValueTreeState paramsJuce;
     ParamUpdateListener paramsListener;
+
+    juce::Optional<juce::AudioPlayHead::PositionInfo> lastPi;
 
 public:
   CharArray<4096> g_plugin_path;
@@ -103,7 +106,7 @@ public: // override AudioEffect methods
   virtual void resume();
   virtual void suspend();
 
-  unsigned int curProgram;
+  unsigned int curProgram = 0;
 
 public:
   // cast the editor to our gui
