@@ -31,10 +31,6 @@ General Public License for more details.
 
 #include "MorphParam.h"
 
-#ifdef _DEBUG
-#  include "HtmlLog.h"
-#endif
-
 #include "BlkFxParam.h"
 #include "FxRun1_0.h"
 //#include "gui_stuff.h"
@@ -146,9 +142,6 @@ public: // GUI stuff that is only valid when the GUI is open
 		enum { DISP_FREQ_HZ, DISP_FREQ_NOTE } _disp_freq_mode;
 #endif
 
-#ifdef _DEBUG
-  HtmlLog _html_log;
-#endif
 };
 
 #endif

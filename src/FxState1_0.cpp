@@ -62,13 +62,8 @@ void FxState1_0::init(DtBlkFxAudioProcessor* b, int fx_set)
   _fx_set = fx_set;
   _b = b;
 
-#ifdef _DEBUG
-  CharArray<64> name;
-  name << LOG_FILE_PATH "fxstate_" << InterlockedIncrement(&g_dbg_inst) << ".html";
-  _html_log.open(name);
-#endif
 
-  LOG(0x088000, "FxState1_0::init" << VAR(b) << VAR(fx_set));
+  juce::Logger::writeToLog(juce::String("0x088000") + " FxState1_0::init "  + juce::String(fx_set));
 
   // set all params to behave like 1.0 params
   int param_offs = BlkFxParam::paramOffs(_fx_set);

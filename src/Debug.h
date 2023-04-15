@@ -16,20 +16,14 @@
     #undef DBG_CODE
     #define DBG_CODE(a) a
 
-    #include "HtmlLog.h"
-
     // print to debug file
     #ifdef LOG_FILE_NAME
-        static HtmlLog dbg(LOG_FILE_NAME);
-
         #undef LOG
-        #define LOG(style, str) HTML_LOG(dbg, style, str)
+        #define LOG(style, str) static_assert(false, "Replace old LOG call here!");
     #endif
 
-    // global log file
-    extern HtmlLog global_log;
     #undef LOGG
-    #define LOGG(style, str) HTML_LOG(global_log, style, str)
+    #define LOGG(style, str) static_assert(false, "Replace old LOG call here!");
 
     //
     #include <sstream>
