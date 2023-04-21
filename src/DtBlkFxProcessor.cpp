@@ -110,7 +110,7 @@ void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
       g_blk_fx_presets[0].getChildWithName(BlkFxParam::idNodeProgram)
                          .setProperty(BlkFxParam::idProgName, "file not found", nullptr);
       for (size_t i = 1; i < g_blk_fx_presets.size(); ++i){
-          juce::String presetName = juce::String(i) + " user";
+          juce::String presetName =  "user " + juce::String(i);
           g_blk_fx_presets[i] = BlkFxParam::generateValueTree(paramsJuce);
           g_blk_fx_presets[i].getChildWithName(BlkFxParam::idNodeProgram)
                            .setProperty(BlkFxParam::idProgName, presetName, nullptr);
@@ -203,7 +203,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
 
   //Load Presets
   //TODO: A binary resource might be more appropiate?
-  juce::File presetPath = juce::File::getSpecialLocation(juce::File::currentApplicationFile).getChildFile("presets.txt");
+  juce::File presetPath = juce::File::getSpecialLocation(juce::File::currentApplicationFile).getParentDirectory().getChildFile("presets.txt");
   LoadPresets(presetPath);
 
   for (i = 0; i < _fx1_0.size(); i++){
@@ -229,13 +229,15 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   }
   _max_delay_n = _x3_sz - MAX_FFT_SZ - 2048;
 
-  // copy presets into the program
+  // copy presets into the /rogram
   _program.reserve( static_cast<size_t>(getNumPrograms()));
   //Deep Copy the trees
   for(auto tree : g_blk_fx_presets){
     _program.push_back(tree.createCopy());
   }
   _program.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, "> reset current <:0.0 0.062745098 0.1098039 0.35"));
+    //Use the first program
+    paramsJuce.replaceState(_program[0]);
 
   //TODO: Is setting input/output channel count necessary in JUCE
   //setNumInputs(AUDIO_CHANNELS);
@@ -357,8 +359,18 @@ void DtBlkFxAudioProcessor::setCurrentProgram(int index)
 
 const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
 {
-    auto subTree = getCurrentProgamState().getChildWithName(BlkFxParam::idNodeProgram);
-    return subTree[BlkFxParam::idProgName];
+    if(index >= 0 || static_cast<size_t>(index) < _program.size()){
+        if (index == getCurrentProgram()) {
+            //In case there was any change, show the currently used name
+            auto subTree = paramsJuce.state.getChildWithName(BlkFxParam::idNodeProgram);
+            return subTree[BlkFxParam::idProgName];
+        }else{
+            //Else use the stored name
+            auto subTree = _program[index].getChildWithName(BlkFxParam::idNodeProgram);
+            return subTree[BlkFxParam::idProgName];
+        }
+    }
+    return "Index out of Bound!";
 }
 
 void DtBlkFxAudioProcessor::changeProgramName(int index, const juce::String& newName)
