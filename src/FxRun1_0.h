@@ -36,7 +36,7 @@ class DtBlkFxAudioProcessor;
 class FxState1_0;
 
 // number of 1.0 effects
-extern const int g_num_fx_1_0;
+extern const size_t g_num_fx_1_0;
 
 //-------------------------------------------------------------------------------------------------
 class FxRun1_0
@@ -44,14 +44,14 @@ class FxRun1_0
 {
 protected:
   // effect name
-  const char* _name;
+  juce::String _name;
 
   // whether a particular fx set param is used by this effect
   bool _params_used[BlkFxParam::NUM_FX_PARAMS];
 
 public:
   // construct with effect name
-  FxRun1_0(const char* name = "?")
+  FxRun1_0(juce::String name = "?")
   {
     _name = name;
 
@@ -75,7 +75,7 @@ public:
   }
 
   // get the effect name
-  virtual const char* name() { return _name; }
+  virtual const juce::String& name() const { return _name; }
 
   // return whether a particular FX_SET parameter is used (0..NUM_FX_PARAMS-1)
   virtual bool paramUsed(int param_idx) { return _params_used[param_idx]; }
@@ -119,6 +119,6 @@ public: // internal stuff to do with value presets
 };
 
 // get fx run corresponding to "idx"
-FxRun1_0* GetFxRun1_0(int idx);
+FxRun1_0* GetFxRun1_0(size_t idx);
 
 #endif

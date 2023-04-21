@@ -48,7 +48,7 @@ FxRun1_0* FxState1_0::getFxRun(bool for_display)
   float fx_type_param = _b->get(for_display ? &GetInput : &GetPrev, _param[BlkFxParam::FX_TYPE]);
 
   //
-  int fx_type = BlkFxParam::getEffectType(fx_type_param);
+  size_t fx_type = static_cast<size_t>(BlkFxParam::getEffectType(fx_type_param));
 
   //
   return GetFxRun1_0(fx_type);
@@ -154,7 +154,7 @@ bool /*true=printed*/ FxState1_0::getParamDisplay(BlkFxParam::SplitParamNum& p, 
     }
 
     case FX_TYPE: {
-      str << fx_run->name();
+      str << fx_run->name().toRawUTF8();
       return true;
     }
 
@@ -454,8 +454,9 @@ void FxState1_0::onMouseTopPanel(wxMouseEvent& ev)
 
 		// add the strings to the list box
 		list_ctrl->InsertColumn(0, wxString());
-		for(int i = 0; i < g_num_fx_1_0; i++)
+		for(size_t i = 0; i < g_num_fx_1_0; ++i){
 			list_ctrl->InsertItem(i, wxString(GetFxRun1_0(i)->name()));
+        }
 
 		list_ctrl->CentreWdwOnSelection(
 			fx_type,										// current selection
@@ -466,7 +467,9 @@ void FxState1_0::onMouseTopPanel(wxMouseEvent& ev)
 
 		popup->Popup(panel);
 	}
-	if(redraw) _top_panel->Refresh(/*erase*/false);
+	if(redraw) {
+        _top_panel->Refresh(/*erase*/false);
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -483,7 +486,7 @@ void FxState1_0::onPaintFreqEdit(wxPaintEvent& ev)
 	dc.DrawRectangle(wxPoint(), wdw->GetSize());
 
 	// effect value text
-	int fx_type = BlkFxParam::getEffectType(getParamInput(BlkFxParam::FX_TYPE));
+	size_t fx_type = BlkFxParam::getEffectType(getParamInput(BlkFxParam::FX_TYPE));
 	FxRun1_0* fft_fx = GetFxRun1_0(fx_type);
 
 	_freq_param_edit->textMorphPrepare(dc, morph_idx);
@@ -522,7 +525,7 @@ void FxState1_0::onPaintAmpEdit(wxPaintEvent& ev)
 	dc.DrawRectangle(wxPoint(), wdw->GetSize());
 
 	// effect value text
-	int fx_type = BlkFxParam::getEffectType(getParamInput(BlkFxParam::FX_TYPE));
+	size_t fx_type = BlkFxParam::getEffectType(getParamInput(BlkFxParam::FX_TYPE));
 	FxRun1_0* fft_fx = GetFxRun1_0(fx_type);
 
 	_amp_param_edit->textMorphPrepare(dc);
@@ -556,7 +559,7 @@ void FxState1_0::onPaintFxValEdit(wxPaintEvent& ev)
 	dc.DrawRectangle(wxPoint(), wdw->GetSize());
 
 	// effect value text
-	int fx_type = BlkFxParam::getEffectType(getParamInput(BlkFxParam::FX_TYPE));
+	size_t fx_type = BlkFxParam::getEffectType(getParamInput(BlkFxParam::FX_TYPE));
 	FxRun1_0* fft_fx = GetFxRun1_0(fx_type);
 
 	_fxval_param_edit->textMorphPrepare(dc);

@@ -699,7 +699,7 @@ class HarmMaskFx
 // harmonic mask effect does no processing - it provides a freq mask for the next effect
 {
 public:
-  HarmMaskFx(const char* name, bool freq_b_param_used)
+  HarmMaskFx(const juce::String& name, bool freq_b_param_used)
       : FxRun1_0(name)
   {
     InitHarmValuePresets(this);
@@ -1914,7 +1914,7 @@ public:
 class HarmMatchFx : public FxRun1_0 {
 public:
   HarmData _data;
-  HarmMatchFx(const char* name, HarmData data)
+  HarmMatchFx(const juce::String& name, HarmData data)
       : FxRun1_0(name)
   {
     _data = data;
@@ -2485,7 +2485,7 @@ public:
 class HarmMatch2Fx : public FxRun1_0 {
 public:
   bool _RL_mode;
-  HarmMatch2Fx(const char* name, bool RL_mode)
+  HarmMatch2Fx(const juce::String& name, bool RL_mode)
       : FxRun1_0(name)
   {
     InitHarmValuePresets(this);
@@ -3010,11 +3010,11 @@ FxRun1_0* g_fft_fx_table[] = {&g_filter_fx,
 #endif
 };
 
-const int g_num_fx_1_0 = NUM_ELEMENTS(g_fft_fx_table);
+const size_t g_num_fx_1_0 = NUM_ELEMENTS(g_fft_fx_table);
 
-FxRun1_0* GetFxRun1_0(int idx)
+FxRun1_0* GetFxRun1_0(size_t idx)
 {
-  if (idx < 0 || idx >= g_num_fx_1_0)
+  if (idx >= g_num_fx_1_0)
     return &g_no_fx;
   return g_fft_fx_table[idx];
 }

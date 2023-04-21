@@ -1,4 +1,8 @@
 #include "BlkFxParam.h"
+#include "FxRun1_0.h"
+
+extern const size_t g_num_fx_1_0; //Defined in FxRun1_0.h
+extern FxRun1_0* g_fft_fx_table[];
 
 namespace BlkFxParam
 {
@@ -26,12 +30,18 @@ namespace BlkFxParam
         subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_7", "FX Slot 7", " | "));
         subgroups.push_back(std::make_unique<AudioProcessorParameterGroup>("FX_8", "FX Slot 8", " | "));
 
+        //Calculate FX_Run name list
+        juce::StringArray fxNames;
+        for (size_t i = 0; i < g_num_fx_1_0; ++i) {
+            fxNames.add(g_fft_fx_table[i]->name());
+        }
+
         for(auto& subgroup : subgroups){
             auto prefix = subgroup->getID();
             subgroup->addChild(std::make_unique<AudioParameterFloat>(prefix + "_FREQ_A", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
                                std::make_unique<AudioParameterFloat>(prefix + "_FREQ_B", "Frequency B", NormalisableRange<float>(0.f, 1.f), 1.f),
                                std::make_unique<AudioParameterFloat>(prefix + "_FX_AMP", "Amplitude", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>(prefix + "_FX_TYPE", "Type", NormalisableRange<float>(0.f, 1.f), 0.f), //TODO: AudioParameterInt or AudioParameterChoice would probably be better but same problem as above.
+                               std::make_unique<AudioParameterChoice>(prefix + "_FX_TYPE", "Type", fxNames, 0), //TODO: AudioParameterInt or AudioParameterChoice would probably be better but same problem as above.
                                std::make_unique<AudioParameterFloat>(prefix + "_FX_VAL", "Value", NormalisableRange<float>(0.f, 1.f), 0.f)
                            );
         }
