@@ -55,7 +55,7 @@ FxRun1_0* FxState1_0::getFxRun(bool for_display)
 }
 
 //-------------------------------------------------------------------------------------------------
-void FxState1_0::init(DtBlkFxAudioProcessor* b, int fx_set)
+void FxState1_0::init(DtBlkFxAudioProcessor* b, unsigned int fx_set)
 {
   //_disp_freq_mode = DISP_FREQ_HZ;
 
@@ -66,8 +66,8 @@ void FxState1_0::init(DtBlkFxAudioProcessor* b, int fx_set)
   juce::Logger::writeToLog(juce::String("0x088000") + " FxState1_0::init "  + juce::String(fx_set));
 
   // set all params to behave like 1.0 params
-  int param_offs = BlkFxParam::paramOffs(_fx_set);
-  for (int i = 0; i < BlkFxParam::NUM_FX_PARAMS; i++) {
+  unsigned int param_offs = BlkFxParam::paramOffs(_fx_set);
+  for (unsigned int i = 0; i < BlkFxParam::NUM_FX_PARAMS; ++i) {
     _param[i].setModeLin(param_offs + i);
     Array<float, 6> anchor_data = {0, .2f, .4f, .6f, .8f, 1};
     _param[i].setAll(anchor_data);

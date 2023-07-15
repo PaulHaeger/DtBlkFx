@@ -50,7 +50,7 @@ class FxState1_0 //: public wxEvtHandler
 {
 public:
   // call init before use
-  void init(DtBlkFxAudioProcessor* b, int fx_set);
+  void init(DtBlkFxAudioProcessor* b, unsigned int fx_set);
 
   bool /*true=printed*/ getParamDisplay(BlkFxParam::SplitParamNum& p, float v, Rng<char> str);
 
@@ -64,7 +64,7 @@ public:
   FxState1_0* prevFxState();
 
   // which fx set we are
-  int _fx_set;
+  unsigned int _fx_set;
 
   // parent
   //TODO: Can this be replaced with smart pointers?

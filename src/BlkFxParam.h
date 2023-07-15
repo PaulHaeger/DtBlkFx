@@ -208,7 +208,7 @@ namespace BlkFxParam {
 
 
     // get the parameter offset given an fx set
-    inline int paramOffs(int fx_set)
+    inline unsigned int paramOffs(unsigned int fx_set)
     {
       return NUM_GLOBAL_PARAMS + fx_set * NUM_FX_PARAMS;
     }
@@ -410,17 +410,10 @@ namespace BlkFxParam {
     }
 
     // --- FX_TYPE --------------------------------------------------------------------------------
-    inline long /*index*/ getEffectType(float /*0..1*/ param)
-    {
-      // align to renoise effect values, allow for up to 32 possible effects
-      return (long)(param * 255.0) / 8;
-    }
+    unsigned int /*index*/ getEffectType(float /*0..1*/ param);
 
     // inverse function to return the effect type param given an index
-    inline float /*param 0..1*/ getEffectTypeInv(long index)
-    {
-      return (float)(index * 8 + 4) / 255.0f;
-    }
+    float /*param 0..1*/ getEffectTypeInv(long index);
 
     // --- FX_AMP ---------------------------------------------------------------------------------
     inline float /*dB*/ getEffectAmp(float /*0..1*/ param)

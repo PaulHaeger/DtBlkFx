@@ -1,5 +1,6 @@
 #include "BlkFxParam.h"
 #include "FxRun1_0.h"
+#include "rfftw_float.h"
 
 extern const size_t g_num_fx_1_0; //Defined in FxRun1_0.h
 extern FxRun1_0* g_fft_fx_table[];
@@ -9,13 +10,19 @@ namespace BlkFxParam
     using namespace juce;
 
     AudioProcessorValueTreeState::ParameterLayout generateParameterLayout(){
+        //Generate FFT Size list
+        juce::StringArray fftPlanSizes;
+        for(size_t i = 0; i < NUM_FFT_SZ; ++i){
+            fftPlanSizes.add(juce::String(g_fft_sz[i]));
+        }
         //Global params
         AudioProcessorValueTreeState::ParameterLayout params;
+        auto fftLenAttributes = juce::AudioParameterChoiceAttributes().withLabel("samples");
         auto global_group = std::make_unique<AudioProcessorParameterGroup>("GLOBAL", "Global", " | ");
         global_group->addChild(
                 std::make_unique<AudioParameterFloat>("MIX_BACK", "Mix Back", NormalisableRange<float>(0.f, 1.f), 0.f),
                 std::make_unique<AudioParameterFloat>("DELAY", "Delay", NormalisableRange<float>(0.f, 1.f), 0.f),
-                std::make_unique<AudioParameterFloat>("FFTLEN", "FFT Length",  NormalisableRange<float>(0.f, 1.f), 0.f), //TODO: AudioParameterInt would be more fitting, but in the moment its not clear what would need to be changed.
+                std::make_unique<AudioParameterChoice>("FFTLEN", "FFT Length",  fftPlanSizes, 0, fftLenAttributes),
                 std::make_unique<AudioParameterFloat>("OVERLAP", "Overlap",  NormalisableRange<float>(0.f, 1.f), 0.f)
         );
         params.add(std::move(global_group));
@@ -35,13 +42,14 @@ namespace BlkFxParam
         for (size_t i = 0; i < g_num_fx_1_0; ++i) {
             fxNames.add(g_fft_fx_table[i]->name());
         }
+        auto ampAttributes = juce::AudioParameterFloatAttributes().withLabel("dB");
 
         for(auto& subgroup : subgroups){
             auto prefix = subgroup->getID();
             subgroup->addChild(std::make_unique<AudioParameterFloat>(prefix + "_FREQ_A", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
                                std::make_unique<AudioParameterFloat>(prefix + "_FREQ_B", "Frequency B", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>(prefix + "_FX_AMP", "Amplitude", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterChoice>(prefix + "_FX_TYPE", "Type", fxNames, 0), //TODO: AudioParameterInt or AudioParameterChoice would probably be better but same problem as above.
+                               std::make_unique<AudioParameterFloat>(prefix + "_FX_AMP", "Amplitude", NormalisableRange<float>(-60.f, 40.f), 40.f, ampAttributes),
+                               std::make_unique<AudioParameterChoice>(prefix + "_FX_TYPE", "Type", fxNames, 0),
                                std::make_unique<AudioParameterFloat>(prefix + "_FX_VAL", "Value", NormalisableRange<float>(0.f, 1.f), 0.f)
                            );
         }
@@ -91,6 +99,14 @@ namespace BlkFxParam
                 //Find the correct property
                 auto groupId = getGroupForIndex(i);
                 auto subTree = stateTree.getOrCreateChildWithName(groupId, nullptr);
+                //calculate the transformed value
+                juce::RangedAudioParameter* param = apvts.getParameter(paramsIds[i]);
+                if(!param){
+                     //nullptr check
+                     juce::Logger::writeToLog("Error: Parameter with name " + paramsIds[i] + " not found inside the passed `AudioProcessorValueTreeState`!");
+                     return ValueTree();
+                }
+                float newValue = param->convertFrom0to1(value);
                 //set the new value
                 subTree.setProperty(paramsIds[i], value, nullptr);
             }
@@ -98,5 +114,14 @@ namespace BlkFxParam
 
         }
         return stateTree;
+    }
+
+    unsigned int getEffectType(float param){
+        return static_cast<unsigned int>(param * g_num_fx_1_0);
+    }
+
+    float  getEffectTypeInv(unsigned int index)
+    {
+      return (float)(index * 8 + 4) / 255.0f;
     }
 } // namespace BlkFxParam

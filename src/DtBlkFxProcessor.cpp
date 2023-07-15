@@ -135,13 +135,23 @@ void DtBlkFxAudioProcessor::initJuceParams(){
 
 void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, float newValue) {
 
+
   auto it = BlkFxParam::idIndexMap.find(parameterId);
   // safety
   if (it == BlkFxParam::idIndexMap.end()){
     return;
   }
-
   unsigned int index = it->second;
+
+  //Convert to [0,1] range, since ranges may differ (AudioParameterChoice will use integer stepping for example).
+  juce::RangedAudioParameter* param = paramsJuce.getParameter(parameterId);
+  if(!param){
+     //nullptr check
+     juce::Logger::writeToLog("DtBlkFxProcessor::parameterUpdated: Parameter with id : '" + parameterId + "' is in range with index: " + juce::String(index) + " but not found inside the value Tree!");
+     return;
+   }
+   newValue = param->convertTo0to1(newValue);
+
 
 
   ScopeCriticalSection scs(_protect);
@@ -161,6 +171,14 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
     if (_params_state != PARAMS_INTERP_OK)
       _params_need_processing = true;
   }
+  if(index >= BlkFxParam::NUM_GLOBAL_PARAMS){
+  //Fx Param set => Update Fx State
+      unsigned int shifted = (index - BlkFxParam::NUM_GLOBAL_PARAMS);
+      unsigned int group = shifted / BlkFxParam::NUM_FX_PARAMS;
+      unsigned int fx_param_id = shifted % BlkFxParam::NUM_FX_PARAMS;
+      juce::Logger::writeToLog("DtBlkFxProcessor::parameterUpdated: Fx " + juce::String(group) + ", Parameter " + juce::String(fx_param_id) + " set to: " + juce::String(newValue));
+  }
+
 
   //TODO: GUI Connection
   //if(gui())
@@ -1301,10 +1319,10 @@ inline void DtBlkFxAudioProcessor::procFFT()
 int i;
 
 // run all of the 1.0 effects (collect params first & then process)
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
     _fx1_0[i].prepare();
 }
-for (i = 0; i < BlkFxParam::NUM_FX_SETS; i++) {
+for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
     _fx1_0[i].process();
 }
 
