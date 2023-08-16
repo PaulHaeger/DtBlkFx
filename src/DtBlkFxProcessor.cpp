@@ -41,42 +41,6 @@
 std::ofstream f_param("/tmp/param.dat");
 #endif
 
-#define LOG(a, b)                                                                                  \
-  {                                                                                                \
-  }
-
-#if 0
-#  define LOG_FILE_NAME "c:\\blkfx.html"
-#  include "Debug.h"
-
-#  ifdef _DEBUG
-  static const char* g_vars_hdr[] = {
-    "curr_samp<br>_abs",
-    "buf_end_abs",
-    "x0_i",
-    "x0_n",
-    "x0_xform_i",
-    "x3_o",
-    "x3_end_abs",
-    "dst_fft_abs",
-    "blk_samp_abs",
-    "time_fft_n",
-    "freq_fft_n",
-    "data_pre<br>_x0_n",
-    "shoulder_n",
-    "next_blk<br>_fwd_n",
-    "extra_data",
-    "fadein_n",
-    "fadeout_n"
-  };
-
-  static HtmlTable g_vars(
-    "c:\\blkfx_vars.html",  // output file
-    "example.css",          // style sheet
-    g_vars_hdr, NUM_ELEMENTS(g_vars_hdr) // heading data
-  );
-#  endif
-#endif
 
 using namespace std;
 
@@ -168,8 +132,9 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
     pollUpdate(/*force*/ true);
 
     // trigger sample processing loop to check params again
-    if (_params_state != PARAMS_INTERP_OK)
+    if (_params_state != PARAMS_INTERP_OK){
       _params_need_processing = true;
+    }
   }
   if(index >= BlkFxParam::NUM_GLOBAL_PARAMS){
   //Fx Param set => Update Fx State
@@ -186,10 +151,12 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
 }
 
 void DtBlkFxAudioProcessor::updateAllParameters(){
+    juce::Logger::outputDebugString("updateAllParameters Called!");
     for(size_t i = 0; i < BlkFxParam::paramsIds.size(); ++i){
-        parameterUpdated(BlkFxParam::paramsIds[i].toString(),
-                         paramsJuce.getRawParameterValue(BlkFxParam::paramsIds[i])->load()
-                         );
+        float value = paramsJuce.getRawParameterValue(BlkFxParam::paramsIds[i])->load();
+        auto* param = paramsJuce.getParameter(BlkFxParam::paramsIds[i]);
+        param->setValueNotifyingHost(value);
+        //parameterUpdated(BlkFxParam::paramsIds[i].toString(),);
     }
 }
 
@@ -204,9 +171,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
       ), paramsJuce(*this, nullptr, "PARAMETERS", BlkFxParam::generateParameterLayout()),
     paramsListener(this)
 {
-  int i;
-
-  LOG("", "DtBlkFx constructor");
+  unsigned int i;
 
   _vst_param_idx_focus = -1;
 
@@ -224,7 +189,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   juce::File presetPath = juce::File::getSpecialLocation(juce::File::currentApplicationFile).getParentDirectory().getChildFile("presets.txt");
   LoadPresets(presetPath);
 
-  for (i = 0; i < _fx1_0.size(); i++){
+  for (i = 0; i < _fx1_0.size(); ++i){
     _fx1_0[i].init(this, /*fx set*/ i);
   }
 
@@ -255,7 +220,10 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   }
   _program.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, "> reset current <:0.0 0.062745098 0.1098039 0.35"));
     //Use the first program
-    paramsJuce.replaceState(_program[0]);
+  curProgram = 0;
+  paramsJuce.replaceState(_program[0]);
+  setCurrentProgram(0);
+  updateAllParameters();
 
   //TODO: Is setting input/output channel count necessary in JUCE
   //setNumInputs(AUDIO_CHANNELS);
@@ -363,6 +331,7 @@ void DtBlkFxAudioProcessor::setCurrentProgram(int index)
       juce::Logger::writeToLog("Saved old state to program list");
       paramsJuce.replaceState(_program[curProgram]);
       juce::Logger::writeToLog("Replaced Program State");
+      updateHostDisplay();
   }else {
     // check for the special "reset current program"
     // reset current program to defaults
@@ -629,7 +598,6 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
 // virtual, override AudioEffect
 // only save using the latest chunk version
 {
-  LOG("", "DtBlkFxProcessor::getChunk" << VAR(isPreset));
 
   int i;
 
@@ -668,107 +636,6 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
   // save the programs if we're not a preset
   if (!is_preset) {
     // save all presets
-    LOG("", "DtBlkFxProcessor::getChunk saving" << VAR(chunk_data->num_programs));
-    for (i = 0; i < num_programs; i++)
-      _program[i].saveLittleEndian(&le_data, 4 + 5 * 8);
-  }
-
-  *vdata = &_chunk_data[0];
-  return _chunk_data.size();
-}
-
-//-------------------------------------------------------------------------------------------------
-//int32_t / *1=success* /// DtBlkFxProcessor::setChunk(void* vdata, int32_t n_bytes, bool isPreset)
-// virtual, override AudioEffect
-/ *
-{
-  LittleEndianMemStr le_data(vdata, n_bytes);
-
-  unsigned long tag;
-  if (!le_data.get32(&tag))
-    return 0;
-  if (tag != CHUNK_TAG)
-    return 0;
-
-  unsigned long vers;
-  if (!le_data.get32(&vers))
-    return 0;
-
-  if (vers == 0) {
-    // preset recall not supported with old version
-    if (isPreset)
-      return 0;
-
-    // attempt to recall everything, write 0's if we run out of params in the data
-    for (int i = 0; i < / *num params* /// 4 + 5 * 4; i++) {
-                                     / *
-      float param = 0.0f;
-      le_data.get32(&param);
-      setParameter(i, param);
-    }
-    return 1;
-  }
-
-  // these versions are nearly the same
-  if (vers == 100 || vers == 101) {
-    long num_programs;
-    if (!le_data.get32(&num_programs))
-      return 0;
-
-    long curr_program;
-    if (vers == 101)
-      if (!le_data.get32(&curr_program))
-        return 0;
-
-    int num_params = 4 + 5 * 4; // vers 100 num params: 4 effects
-    if (vers == 101)
-      num_params = 4 + 5 * 8; // 8 effects
-
-    //
-    if (isPreset) {
-      // recall a single program
-      currProgram().loadLittleEndian(&le_data, num_params);
-
-      // update everything
-      setProgram(currProgramNum());
-    }
-    else {
-      // recall everything: current params & all programs
-      long i;
-
-      // get current params
-      BlkFxProgram curr;
-      if (!curr.loadLittleEndian(&le_data, num_params))
-        return 0;
-
-      // max number of programs that we can load
-      long max_num_programs = AudioEffect::numPrograms - 1;
-
-      // calculate the number of programs based on the number of bytes
-      num_programs = min(static_cast<long>(le_data.n) / PackedBytesPerVstProgram(num_programs), num_programs);
-
-      // don't load more than what we have space for
-      num_programs = min(max_num_programs, num_programs);
-
-      // load all the programs
-      for (i = 0; i < num_programs; i++)
-        _program[i].loadLittleEndian(&le_data, num_params);
-
-      // check whether we need to rename the last param loaded
-      if (i > 0 && i <= max_num_programs &&
-          strcmp(_program[i - 1].getName(), "> reset current <") == 0)
-        _program[i - 1].setName("unnamed");
-
-      // determine current program
-      if (vers == 101)
-        AudioEffect::curProgram = curr_program;
-      else
-        // current program number is stored as the name of the "curr" params
-        // I did it like this because I forgot to add a specific field for this in a prerelease
-        AudioEffect::curProgram = strtol(curr.getName(), / *end ptr* /// NULL, / *base* / 10);
-/ *
-      curProgram = currProgramNum(); // limit range
-      LOG("", "DtBlkFxProcessor::setChunk v1.0" << VAR(curProgram));
 
       // set all of the current params
       for (i = 0; i < BlkFxParam::TOTAL_NUM; i++)
@@ -777,7 +644,6 @@ int32_t DtBlkFxProcessor::getChunk(void** vdata, bool is_preset)
     return 1;
   }
 
-  LOG("", "DtBlkFxProcessor::setChunk, unknown type" << VAR(byteSize) << VAR(isPreset));
   return 0; // can't recall
 }
 ***/
@@ -787,7 +653,6 @@ void DtBlkFxAudioProcessor::resume()
 // virtual, override AudioEffect
 // called by vst-host to get ready to start processing
 {
-  LOG("", "DtBlkFxProcessor::resume");
   //NOTE: There doesnt seem to be a juce equivalent...
   //AudioEffectX::resume();
 
@@ -803,7 +668,6 @@ void DtBlkFxAudioProcessor::suspend()
 // called by vst-host when sound is stopping
 //NOTE: Seems to be reset() in JUCE
 {
-  LOG("", "DtBlkFxProcessor::suspend");
 
   ScopeCriticalSection scs(_protect);
 
@@ -1010,7 +874,7 @@ inline void DtBlkFxAudioProcessor::paramsChkSync()
       if (get(&GetInterp, _param_sync_param) > 0.5f) {
         _next_blk_fwd_n = param_fwd;
         _params_state = PARAMS_NONINTERP;
-        LOG(0xfff800, "Param sync, abs_pos=" << _blk_samp_abs + param_fwd);
+        juce::Logger::outputDebugString(juce::String("Param sync, abs_pos=")  + juce::String(_blk_samp_abs) + juce::String(param_fwd));
         return;
       }
     }
@@ -1251,7 +1115,7 @@ inline void DtBlkFxAudioProcessor::prepMixOut()
 
       // do nothing if the blk ends prior to the current output position (should not happen)
       if (_curr_samp_abs - dst_fft_end_abs >= 0) {
-        LOG("", "mixToOutputBuffer possible ERROR" << VAR(_curr_samp_abs - dst_fft_end_abs));
+          juce::Logger::outputDebugString("mixToOutputBuffer possible ERROR _curr_samp_abs - dst_fft_end_abs: " + juce::String(dst_fft_end_abs));
         return;
       }
 

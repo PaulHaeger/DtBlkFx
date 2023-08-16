@@ -50,6 +50,7 @@ private:
             :parent(parent) {}
 
         void  parameterChanged (const juce::String &parameterID, float newValue) override {
+            juce::Logger::outputDebugString("Callback: Parameter " + parameterID + " changed to " + juce::String(newValue));
             parent->parameterUpdated(parameterID, newValue);
         }
     };

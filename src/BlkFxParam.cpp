@@ -1,6 +1,7 @@
 #include "BlkFxParam.h"
 #include "FxRun1_0.h"
 #include "rfftw_float.h"
+#include <sstream>
 
 extern const size_t g_num_fx_1_0; //Defined in FxRun1_0.h
 extern FxRun1_0* g_fft_fx_table[];
@@ -48,7 +49,7 @@ namespace BlkFxParam
             auto prefix = subgroup->getID();
             subgroup->addChild(std::make_unique<AudioParameterFloat>(prefix + "_FREQ_A", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
                                std::make_unique<AudioParameterFloat>(prefix + "_FREQ_B", "Frequency B", NormalisableRange<float>(0.f, 1.f), 1.f),
-                               std::make_unique<AudioParameterFloat>(prefix + "_FX_AMP", "Amplitude", NormalisableRange<float>(-60.f, 40.f), 40.f, ampAttributes),
+                               std::make_unique<AudioParameterFloat>(prefix + "_FX_AMP", "Amplitude", NormalisableRange<float>(0.0f, 1.f), 1.0f),
                                std::make_unique<AudioParameterChoice>(prefix + "_FX_TYPE", "Type", fxNames, 0),
                                std::make_unique<AudioParameterFloat>(prefix + "_FX_VAL", "Value", NormalisableRange<float>(0.f, 1.f), 0.f)
                            );
@@ -80,38 +81,48 @@ namespace BlkFxParam
                 juce::Logger::outputDebugString("Error in 'loadFromLegacyFormat': Name missing!");
                 return ValueTree();
             }
+            // Save name to state
             stateTree.getChildWithName(idNodeProgram).setProperty(idProgName, stringData.substring(0, nameEnd), nullptr);
+            // Save current state
+            ValueTree apvtsCurrentState = apvts.copyState();
+
+            // Load newly generated state
+            apvts.replaceState(stateTree);
+
 
             String restData = stringData.substring(nameEnd+1);
             //Apply parameters
-            const char* c_str = restData.toRawUTF8();
-            for(size_t i = 0; i < TOTAL_NUM; ++i) {
-                char* next_str = nullptr;
+            std::istringstream ss(restData.toStdString());
 
+            for(size_t i = 0; i < TOTAL_NUM; ++i){
+                float value;
                 // get the next param, this returns 0 if conversion was unsucessful
-                float value = limit_range(
-                        static_cast<float>(std::strtod(c_str, &next_str)),
+                if(!(ss >> value)){
+                    value = 0.0f;
+                }
+
+                float normedValue = limit_range(
+                        value,
                         0.0f,
                         1.0f
                         );
-                c_str = next_str;
 
                 //Find the correct property
-                auto groupId = getGroupForIndex(i);
-                auto subTree = stateTree.getOrCreateChildWithName(groupId, nullptr);
-                //calculate the transformed value
                 juce::RangedAudioParameter* param = apvts.getParameter(paramsIds[i]);
                 if(!param){
                      //nullptr check
                      juce::Logger::writeToLog("Error: Parameter with name " + paramsIds[i] + " not found inside the passed `AudioProcessorValueTreeState`!");
                      return ValueTree();
                 }
-                float newValue = param->convertFrom0to1(value);
+                //calculate the transformed value
+                float newValue = param->convertFrom0to1(normedValue);
+                param->setValueNotifyingHost(newValue);
                 //set the new value
-                subTree.setProperty(paramsIds[i], value, nullptr);
             }
-
-
+            //All values set, save state
+            stateTree = apvts.copyState();
+            //load old state
+            apvts.replaceState(apvtsCurrentState);
         }
         return stateTree;
     }
