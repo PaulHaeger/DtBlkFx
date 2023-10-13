@@ -43,83 +43,157 @@ inline unsigned int toVstParamIdx(unsigned int i)
 
 
 //-------------------------------------------------------------------------------------------------
+/** \brief This class Manages the time delay for the vst parameters and buffers them.
+ *
+ * Since there may be consideable delays bewteen audio input and the output of the processed
+ * data, there needs to be a mechanism that buffers parameter inputs. If there is a set delay
+ * of 100ms, then any parameter changes we recieve are 100ms in the "future". So if we don't
+ * buffer and interpoliate these inputs the timing may be way off, making the life of any
+ * musician harder than it should be.
+ **/
 class ParamsDelay {
 protected:
-  // delay length
+  /** Number of time points are used for the parameter delay. **/
   unsigned int _length;
 
-  // number of params
+  /** Number of params that are stored. **/
   unsigned int _n_params;
 
-  // current input position
+  /** Current timepoint for parameter input. */
   unsigned int _in;
 
-  // current output position (we interpolate between these)
+  /** \brief Current timepoint for parameter output.
+   *
+   *  The values will be interpoliated between `_out_a` and `_out_b`*/
   unsigned int _out_a, _out_b;
 
-  // expected distance between samp_abs_new in Params (normally matches a fraction of the
-  // tempo, e.g. samples per quarter-note). This is used to control interpolation - params
-  // are only interpolated within this distance up to a change
+  /** \brief Expected distance between `samp_abs_new` in `Params`.
+   *
+   * Normally this matches a fraction of the tempo, e.g. samples per quarter-note.
+   * This is used to control interpolation --  params are only interpolated
+   * within this distance up to a change.
+   **/
   long _expected_dist;
 
-  // current interpolation fraction of between _out_a & _out_b (set by setOutPos)
-  // 0.0f=_out_a, 1.0f=_out_b
+  /** \brief Current interpolation fraction of between _out_a & _out_b.
+   *
+   * The current interpolation is set by `setOutPos` and clamped between 0 and 1,
+   * meaning for `0.0f` the output is `_out_a` and for `1.0f` its `_out_b`.
+   **/
   float _interp_frac;
 
-  // increment index "i", wrapping to 0 if need be
+  /** Helper Method. Increments `i`, wrapping to 0 if it exceeds `_length`.
+   *
+   * \param[in, out] i the index to increment and wrap.
+   **/
+
   void incIndex(unsigned int& i)
   {
     if (++i >= _length)
       i = 0;
   }
 
-  // memory for array of param record, records have the following structure
-  //
-  // struct Record
-  // {
-  //     long samp_abs; // absolute sample position
-  //     float vals[_n_params];
-  //     bool any_explicit_set;
-  //     bool explicit_set[_n_params];
-  // };
+  /** \brief Memory for array of param record.
+   *
+   * The array carries `_length' times a record.
+   * Records have the following structure:
+   * ```struct Record
+   * {
+   *     long samp_abs; // absolute sample position
+   *     float vals[_n_params]; // parameter values
+   *     bool any_explicit_set; //Any parameter explicitly set?
+   *     bool explicit_set[_n_params]; //which parameters are set explicitly
+   * };```
+   *
+   * \note The data itself is stored in a flat byte array instead of a struct.
+   **/
   std::vector<char> _data;
 
   // std::vector<long> _samp_abs;
   // std::vector<float> _vals;
 
   // params can be overridden
+
+  /** \brief This bool array tells if for parameter `i` the overwritten value should be forced.
+   *
+   **/
   std::vector<bool> _use_override_param;
+
+  /** This array stores the value that should be used if parameter `i` is overwritten.**/
   std::vector<float> _override_param;
 
   // offset of each field in each data record
-  unsigned int _field_byte_offs[2], _record_len_bytes;
+  /* \brief Stores the offset of each field in the data record.
+   *
+   * At index `0` the offset of `any_explicit_set` is stored, meaning the offset is
+   * long + float * n_params_`.
+   * At index `1` the offset of `explicit_set[_n_params]` is stored, meaning the offset
+   * is `_override_param[0] + bool`.
+   **/
+  unsigned int _field_byte_offs[2];
+
+  /** Stores the total length of one record. **/
+ unsigned int _record_len_bytes;
 
 protected:
-  // access a record from _data (which is just an array of bytes) & cast
+  /** Accesses the element in record at timepoint `i`.
+   *
+   * \param i timepoint of the record.
+   * \param byte_offs the offset in bytes of the desired element to read
+   * \return A (reinterpret casted) pointer to the selected position.
+   *
+   * \note This Method is not (pointer)-aliasing safe. If this is a problem on your specific platform (not the case on most desktop platforms)
+   *    then the quick way to fix this is by first allocating an oject of type `T` and then to memcopy
+   *    the data from the pointer into the allocated object.
+   *
+   * \note To any future developer: If pointer alignment does actually become important again on some kind of new
+   *    architecture, then the proper way to solve this (and probably what runs faster as well) is to
+   *    create a proper structure like a `struct` for the records where the compiler takes care of
+   *    alignment for you, preventing pointer aliasing. That means however that a lot of the code here has to be adapted...
+   **/
   template <class T> T* data(unsigned int i, unsigned int byte_offs) const
   {
-      //TODO: Make alias safe
     return reinterpret_cast<T*>(begin(_data) + i * _record_len_bytes + byte_offs);
   }
 
   // access various things in _data, do all this stuff our selves so that we create
   // contiguous records of any size
-  long& samp_abs(unsigned int row) const { return *data<long>(row, 0); }
-  float* vals(unsigned int row) const { return data<float>(row, sizeof(long)); }
-  bool& any_explicit_set(unsigned int row) const { return *data<bool>(row, _field_byte_offs[0]); }
-  bool* explicit_set(unsigned int row) const { return data<bool>(row, _field_byte_offs[1]); }
+
+  /** Gets the absolute sample position for record `row`.**/
+  long& getAbsSamplePos(unsigned int row) const { return *data<long>(row, 0); }
+  /** Gets a pointer to the float array of length `_n_params` for record `row`.**/
+  float* getValues(unsigned int row) const { return data<float>(row, sizeof(long)); }
+  /** Gets the value of `any_explicit_set for record `row`.**/
+  bool& getAnyExplicitSet(unsigned int row) const { return *data<bool>(row, _field_byte_offs[0]); }
+  /** Gets the pointer to the bool array of length `_n_params` for record `row`.**/
+  bool* getExplicitSet(unsigned int row) const { return data<bool>(row, _field_byte_offs[1]); }
 
   // get param "param_idx" value from "row" using override if need be
-  float /*0..1: ok*/ getVal(unsigned int row, unsigned int param_idx, bool allow_override = true) const
+  /**\brief Gets the value of the parameter at `param_idx` for record `row`.
+   *
+   * If for the parameter the `_use_override_param` is used and overrides are allowed, then
+   * the overwritten value will returned, else the value stored in the record.
+   *
+   * \param row index of the record.
+   * \param param_idx index of the desired parameter.
+   * \param allow_override Allow the overriden value to be returned if its set.
+   * \return The value of parameter in the record or if overrides are allowed and there is one stored for the parameter, then the overwritten value will be output instead.
+   **/
+  float /*0..1: ok*/ getValue(unsigned int row, unsigned int param_idx, bool allow_override = true) const
   {
-    return _use_override_param[param_idx] && !allow_override ? _override_param[param_idx]
-                                                             : vals(row)[param_idx];
+    return (_use_override_param[param_idx] && !allow_override) ? _override_param[param_idx]
+                                                               : getValues(row)[param_idx];
   }
 
 public:
-  bool isParamIdxOk(unsigned int idx) { return idx >= 0 && idx < _n_params; }
 
-  // must call init before use!
+  /** Checks if the given parameter index is inside the valid range of [0, _n_params]**/
+  inline bool isParamIdxOk(unsigned int idx) { return idx >= 0 && idx < _n_params; }
+
+  /** Initializes the internal storages.
+   *
+   * \warning This must be called before the class can be used!
+   **/
   void init(unsigned int n_params, unsigned int length)
   {
 
@@ -136,15 +210,17 @@ public:
         _field_byte_offs[1] + sizeof(bool) * _n_params; // total length: skip explicit_set
 
     // allocate required memory
+    // _length times above array
     _data.resize(_record_len_bytes * _length);
 
-    // clr first record
+    // Zero out first block of data
     memset(_data.data(), 0, _record_len_bytes);
 
     // by default no values are forced
     _override_param.resize(n_params, 0.0f);
     _use_override_param.resize(n_params, false);
 
+    //call the internal init
     init_();
   }
 
@@ -153,60 +229,99 @@ public:
     _expected_dist = 0x7fffffff; // large initial setting (disable)
   }
 
+  /** Sets the expected distance to `n`. **/
   void setExpectedDist(int n) { _expected_dist = n; }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 public: // parameter override (use for param preview)
-  void setOverride(VstParamIdx idx, bool state) { _use_override_param[idx] = state; }
+
+  /** Sets the override flag for the parameter `idx` to `state`.**/
+  void setOverrideState(VstParamIdx idx, bool state) { _use_override_param[idx] = state; }
+
+  /** Sets the override flag for the parameter `idx` to true and set the value to `v`.
+   *
+   * \note Value must be between 0 and 1.
+   **/
   void setOverride(VstParamIdx idx, float v)
   {
-    setOverride(idx, true);
+    setOverrideState(idx, true);
     _override_param[idx] = v;
   }
-  float /*0..1*/ getOverride(VstParamIdx idx) const { return _override_param[idx]; }
+
+  /** Gets the value of the override for parameter `idx`. **/
+  float /*0..1*/ getOverrideValue(VstParamIdx idx) const { return _override_param[idx]; }
+
+  /** Checks if the override flag is set for the parameter `idx`.**/
   bool isOverridden(VstParamIdx idx) const { return _use_override_param[idx]; }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 public:
   // use "setOutPos" to set the sample position
   // get the most recent input value to the delay
-  float getInput(VstParamIdx idx) const { return getVal(_in, idx); }
-  float getInputNoForced(VstParamIdx idx) const { return getVal(_in, idx, /*use forced*/ false); }
 
-  // get non-interpolated value of current param position rounded down (prev) or up (next)
-  float getPrev(VstParamIdx idx) const { return getVal(_out_a, idx); }
-  float getNext(VstParamIdx idx) const { return getVal(_out_b, idx); }
 
-  // get linear interpolated value of current position
-  float getInterp(VstParamIdx idx) const
+  /** Gets the value of the parameter `idx` at the current time point. Overrides allowed. **/
+  float getInput(VstParamIdx idx) const { return getValue(_in, idx); }
+
+  /** Gets the value of the parameter `idx` at the current time point. No overrides allowed. **/
+  float getInputNoForced(VstParamIdx idx) const { return getValue(_in, idx, /*use forced*/ false); }
+
+
+  /** Gets the value of the parameter `idx` at the beginning of the interpolation range (with overrides). **/
+  float getOutputPrev(VstParamIdx idx) const { return getValue(_out_a, idx); }
+  /** Gets the value of the parameter `idx` at the end of the interpolation range (with overrides). **/
+  float getOutputNext(VstParamIdx idx) const { return getValue(_out_b, idx); }
+
+  /** Get the value at the current position linearly interpolated (overrides allowed).**/
+  float getOutputLinInterp(VstParamIdx idx) const
   {
-    return lin_interp(_interp_frac, getPrev(idx), getNext(idx));
+    return lin_interp(_interp_frac, getOutputPrev(idx), getOutputNext(idx));
   }
 
-  // get the absolute sample position for the current param or next out param
-  long getOutSampAbs(bool next_param = false) const
+  /** \brief Gets the output sample position of either the previous or the next posiiton.
+   *
+   * If given no arguments or `next_param` set `false`, then the the absolute
+   * sample position of the previous point will be returned.
+   * Else the position of the next point will be returned.
+   *
+   * \param next_param flag indicating if previous or next position should be used.
+   * \return The absolute sample position.
+   **/
+  long getOutputAbsSamplePos(bool next_param = false) const
   {
-    return samp_abs(next_param ? _out_b : _out_a);
+    return getAbsSamplePos(next_param ? _out_b : _out_a);
   }
 
-  // get timestamp of current input
-  long getInputSampAbs() const { return samp_abs(_in); }
+  /** Gets the absolute sample position of current input. **/
+  long getInputAbsSamplePos() const { return getAbsSamplePos(_in); }
 
-  // return true if "getNonInterp()" corresponds to an explicitly set parameter
+  /** \brief Checks if `getNonInterp()` corresponds to an explicitly set parameter.
+   *
+   *  \param idx the parameter to be be checked.
+   *  \param next_param should be the previous (default) or the next output be used?
+   *  \return true if explicitly set, false if not.
+   **/
   bool isExplicitlySet(VstParamIdx idx, bool next_param = false) const
   {
-    return explicit_set(next_param ? _out_b : _out_a)[idx];
+    return getExplicitSet(next_param ? _out_b : _out_a)[idx];
   }
 
-  // return true if any param is explicitly set
+  /** \brief Checks if any parameter is explicitly set
+   *
+   * \param next_param should be the previous or the next output be used?
+   * \return true if any parameter is explicitly set, false if not.
+   **/
   long isAnyExplicitSet(bool next_param = false) const
   {
-    return any_explicit_set(next_param ? _out_b : _out_a);
+    return getAnyExplicitSet(next_param ? _out_b : _out_a);
   }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  /** Resets the parameter vector for record 0 and copies the most recent parameters into
+   * record 0 and also reset * abs time to 0 in there. Then the output positions are
+   * reset.
+   **/
   void resetAndCopyIn()
-  // reset the params vector and copy the most recent params but reset abs time to 0
   {
     // copy current input params to time 0
     memcpy(data<char>(/*idx*/ 0, /*byte offs*/ 0),
@@ -214,18 +329,23 @@ public:
            _record_len_bytes);
 
     // reset sample abs time
-    samp_abs(0) = 0;
+    getAbsSamplePos(0) = 0;
 
     init_();
   }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  /** Tests if the outpot position can be inremented, and if it can, does so.
+   *
+   * \return `true` if sucessfully incremented, `false` if no next output is available.
+   **/
   bool /*can go to next?*/ nextOutParam()
   {
     // set the position to what was the next param
     _out_a = _out_b;
     _interp_frac = 0.0f;
 
+    // Test if there is a new record available
     // if we can't increment then we can't get to the next param
     if (_out_b == _in)
       return false;
@@ -235,16 +355,21 @@ public:
   }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  bool /*already exists*/ put(long samp_abs_new, VstParamIdx idx, float value)
-  //
-  // put a parameter with index "idx" and value "value" into a param node at absolute
-  // sample position "samp_abs_new"
-  //
-  // return true if the param already exists
+
+  /**
+  * Put a parameter with index `idx` and value `value` into a param node at absolute
+  * sample position `samp_abs_new`.
+  *
+  * \param samp_abs_new new absolute sample position.
+  * \param idx index of the parameter to set.
+  * \param value value that should be set for the parameter.
+  * \return `true` if the param already exists, `false` if not.
+  **/
+  bool /*already exists*/ putValueAt(long samp_abs_new, VstParamIdx idx, float value)
   {
     bool already_exists = false;
     // does this param have the same time as the most recent one?
-    long samp_diff = samp_abs_new - samp_abs(_in);
+    long samp_diff = samp_abs_new - getAbsSamplePos(_in);
     if (samp_diff <= 0)
       already_exists = true;
     else {
@@ -254,20 +379,21 @@ public:
       // parameter distance
       if (samp_diff > _expected_dist) {
         cpInNode();
-        any_explicit_set(_in) = false;
-        samp_abs(_in) = samp_abs_new - _expected_dist;
+        getAnyExplicitSet(_in) = false;
+        getAbsSamplePos(_in) = samp_abs_new - _expected_dist;
       }
       cpInNode();
-      any_explicit_set(_in) = true;
-      samp_abs(_in) = samp_abs_new;
+      getAnyExplicitSet(_in) = true;
+      getAbsSamplePos(_in) = samp_abs_new;
     }
-    vals(_in)[idx] = value;
-    explicit_set(_in)[idx] = true;
+    getValues(_in)[idx] = value;
+    getExplicitSet(_in)[idx] = true;
     return already_exists;
   }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  bool /*can interpolate*/ setOutPos(long samp_abs_new, bool find_fraction = true)
+  //TODO documentation
+  bool /*can interpolate*/ setOutputPos(long samp_abs_new, bool find_fraction = true)
   //
   // set output sample position, if we can
   // Note, only move forward (don't try to go backwards)
@@ -276,9 +402,9 @@ public:
     // look for params
     while (1) {
 
-      if (samp_abs(_out_b) > samp_abs_new) {
+      if (getAbsSamplePos(_out_b) > samp_abs_new) {
         // find distance from requested sample to _out_a position
-        long numer = samp_abs_new - samp_abs(_out_a);
+        long numer = samp_abs_new - getAbsSamplePos(_out_a);
 
         // can't go in reverse, samp_abs_new lies before "_out_a"
         if (numer < 0) {
@@ -292,7 +418,7 @@ public:
           return true;
 
         // distance between params
-        float denom = (float)(samp_abs(_out_b) - samp_abs(_out_a));
+        float denom = (float)(getAbsSamplePos(_out_b) - getAbsSamplePos(_out_a));
 
         // denominator should never be <=0, but just in case
         if (denom <= 0.0f) {
@@ -305,7 +431,7 @@ public:
       }
 
       // is it an exact match?
-      if (samp_abs(_out_b) == samp_abs_new) {
+      if (getAbsSamplePos(_out_b) == samp_abs_new) {
         _out_a = _out_b;
         if (_out_b != _in)
           incIndex(_out_b);
@@ -336,10 +462,10 @@ protected:
     incIndex(next);
 
     // copy previous _in to new _in
-    memcpy(vals(next), vals(_in), sizeof(float) * _n_params);
+    memcpy(getValues(next), getValues(_in), sizeof(float) * _n_params);
 
     // clear explicit sets
-    memset(explicit_set(next), 0, sizeof(bool) * _n_params);
+    memset(getExplicitSet(next), 0, sizeof(bool) * _n_params);
 
     // check whether we've filled the buffer & need to bump the pointers
     if (next == _out_a) {
@@ -353,7 +479,7 @@ protected:
     _in = next;
   }
 
-  // internal init
+  /** Internal init. Sets the time position and interpolation fraction to 0. **/
   void init_()
   {
     _in = 0;
@@ -396,15 +522,15 @@ inline ParamsDelayGet GetInputNoForced(const ParamsDelay& p)
 }
 inline ParamsDelayGet GetPrev(const ParamsDelay& p)
 {
-  return ParamsDelayGet(p, &ParamsDelay::getPrev);
+  return ParamsDelayGet(p, &ParamsDelay::getOutputPrev);
 }
 inline ParamsDelayGet GetNext(const ParamsDelay& p)
 {
-  return ParamsDelayGet(p, &ParamsDelay::getNext);
+  return ParamsDelayGet(p, &ParamsDelay::getOutputNext);
 }
 inline ParamsDelayGet GetInterp(const ParamsDelay& p)
 {
-  return ParamsDelayGet(p, &ParamsDelay::getInterp);
+  return ParamsDelayGet(p, &ParamsDelay::getOutputLinInterp);
 }
 
 // above functions match this type
