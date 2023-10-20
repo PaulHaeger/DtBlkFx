@@ -353,7 +353,7 @@ public: // preview access
   void setPreviewState(VstParamIdx idx, bool state)
   {
     if (idx >= 0)
-      _params.setOverride(idx, state);
+      _params.setOverrideState(idx, state);
   }
 
   //

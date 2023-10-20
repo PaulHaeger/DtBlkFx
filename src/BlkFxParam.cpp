@@ -133,6 +133,7 @@ namespace BlkFxParam
 
     float  getEffectTypeInv(unsigned int index)
     {
-      return (float)(index * 8 + 4) / 255.0f;
+      //return (float)(index * 8 + 4) / 255.0f;
+      return (float)index/g_num_fx_1_0;
     }
 } // namespace BlkFxParam

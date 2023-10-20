@@ -159,7 +159,7 @@ void FxRun1_0::_fillValues(Rng<float> values)
   // fill the menu
   for (size_t i = 0; i < values.n; i++) {
     _value_presets[j].val = values[i];
-    dispVal(/*FxState1_0*/ NULL, _value_presets[j].str, values[i]);
+    dispVal(/*FxState1_0*/ nullptr, _value_presets[j].str, values[i]);
     j++;
   }
 }

@@ -26,17 +26,19 @@ struct MorphParamArrayAccess
 };
 
 //-------------------------------------------------------------------------------------------------
+/**
+ * each morph param has a particular number of points that are interpolated using
+ * a vst-param as an index so as to produce the final param
+ **/
 class MorphParam
-//
-// each morph param has a particular number of points that are interpolated using
-// a vst-param as an index so as to produce the final param
+
 {
 public:
-  // interpolation mode
+  /** Interpolation Modes**/
   enum Mode {
-    MODE_FIXED,      // ignore vst_param_idx & always use anchor_data[0]
-    MODE_LIN_INTERP, // linear interpolate morph data
-    MODE_STEP,       // step morph data
+    MODE_FIXED,      /** ignore vst_param_idx & always use `anchor_data[0]`.**/
+    MODE_LIN_INTERP, /** linear interpolate morph data.**/
+    MODE_STEP,       /** step morph data. **/
     MODE_CLOSEST_ANCHOR = MODE_STEP
   };
 

@@ -50,6 +50,15 @@ inline unsigned int toVstParamIdx(unsigned int i)
  * of 100ms, then any parameter changes we recieve are 100ms in the "future". So if we don't
  * buffer and interpoliate these inputs the timing may be way off, making the life of any
  * musician harder than it should be.
+ *
+ * You can directly access the data for a parameter through the public get functions, however
+ * a lot of the interfaces intend that you use the given \ref ParamsDelayGet struct instead.
+ * The predefined functions to create a `ParmamsDelayGet` struct are:
+ * - \ref GetInput(const ParamsDelay&),
+ * - \ref GetInputNoForced(const ParamsDelay&),
+ * - \ref GetOutputPrev(const ParamsDelay&),
+ * - \ref GetOutputNext(const ParamsDelay&),
+ * - \ref GetOutputLinInterp(const ParamsDelay&),
  **/
 class ParamsDelay {
 protected:
@@ -236,44 +245,38 @@ public:
 public: // parameter override (use for param preview)
 
   /** Sets the override flag for the parameter `idx` to `state`.**/
-  void setOverrideState(VstParamIdx idx, bool state) { _use_override_param[idx] = state; }
+  void setOverrideState(unsigned int idx, bool state) { _use_override_param[idx] = state; }
 
   /** Sets the override flag for the parameter `idx` to true and set the value to `v`.
    *
    * \note Value must be between 0 and 1.
    **/
-  void setOverride(VstParamIdx idx, float v)
+  void setOverride(unsigned int idx, float v)
   {
     setOverrideState(idx, true);
     _override_param[idx] = v;
   }
 
   /** Gets the value of the override for parameter `idx`. **/
-  float /*0..1*/ getOverrideValue(VstParamIdx idx) const { return _override_param[idx]; }
+  float /*0..1*/ getOverrideValue(unsigned int idx) const { return _override_param[idx]; }
 
   /** Checks if the override flag is set for the parameter `idx`.**/
-  bool isOverridden(VstParamIdx idx) const { return _use_override_param[idx]; }
-
-  //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-public:
-  // use "setOutPos" to set the sample position
-  // get the most recent input value to the delay
-
+  bool isOverridden(unsigned int idx) const { return _use_override_param[idx]; }
 
   /** Gets the value of the parameter `idx` at the current time point. Overrides allowed. **/
-  float getInput(VstParamIdx idx) const { return getValue(_in, idx); }
+  float getInput(unsigned int idx) const { return getValue(_in, idx); }
 
   /** Gets the value of the parameter `idx` at the current time point. No overrides allowed. **/
-  float getInputNoForced(VstParamIdx idx) const { return getValue(_in, idx, /*use forced*/ false); }
+  float getInputNoForced(unsigned int idx) const { return getValue(_in, idx, /*use forced*/ false); }
 
 
   /** Gets the value of the parameter `idx` at the beginning of the interpolation range (with overrides). **/
-  float getOutputPrev(VstParamIdx idx) const { return getValue(_out_a, idx); }
+  float getOutputPrev(unsigned int idx) const { return getValue(_out_a, idx); }
   /** Gets the value of the parameter `idx` at the end of the interpolation range (with overrides). **/
-  float getOutputNext(VstParamIdx idx) const { return getValue(_out_b, idx); }
+  float getOutputNext(unsigned int idx) const { return getValue(_out_b, idx); }
 
   /** Get the value at the current position linearly interpolated (overrides allowed).**/
-  float getOutputLinInterp(VstParamIdx idx) const
+  float getOutputLinInterp(unsigned int idx) const
   {
     return lin_interp(_interp_frac, getOutputPrev(idx), getOutputNext(idx));
   }
@@ -301,7 +304,7 @@ public:
    *  \param next_param should be the previous (default) or the next output be used?
    *  \return true if explicitly set, false if not.
    **/
-  bool isExplicitlySet(VstParamIdx idx, bool next_param = false) const
+  bool isExplicitlySet(unsigned int idx, bool next_param = false) const
   {
     return getExplicitSet(next_param ? _out_b : _out_a)[idx];
   }
@@ -392,12 +395,31 @@ public:
   }
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  //TODO documentation
+  /** \brief Sets the new output position.
+   *
+   * First its checked whether `_out_b` (the last output position for interpolation) is larger than the
+   * new desired position. If the new time position is behind `_out_a`, then there will be no update, since we can't
+   * go back in time. The interpolation fraction will be reset to `0` in that case.
+   *
+   * If `_out_b > samp_abs_new` fails, then `_out_b == samp_abs_new` is checked.
+   * Here the begining of the interpolation frame (`_out_a`) is set to `_out_b`,
+   * then `_out_b` is incremented and wrapped if necessary. The fractional part is set to `0`.
+   *
+   * If none of the above cases apply, the beginning of the interpolation frame `_out_a` is set
+   * to `_out_b` and `_out_b` is incremented and wrapped if necessary. Then the above cases are
+   * checked again. This is repeat until either the above cases apply or the end of the interpolation frame (`_out_b`)
+   * has hit the end (`_in`).
+   * If that happens then we can't set the output to the desired time. `_out_a` and `_out_b` are set to the end
+   * instead and the fractional part is set to `0`.
+   *
+   * If `find_fraction` is set to true, the fractional part for the interpolation will
+   * be recalculated for the first case.
+   *
+   * \param[in] samp_abs_new new time position of the output.
+   * \param[in] find_fraction if the fractional part should be recalculated if necessary.
+   * \return `true` if the time was sucessfully set and `false` if not.
+   **/
   bool /*can interpolate*/ setOutputPos(long samp_abs_new, bool find_fraction = true)
-  //
-  // set output sample position, if we can
-  // Note, only move forward (don't try to go backwards)
-  //
   {
     // look for params
     while (1) {
@@ -452,12 +474,10 @@ public:
   }
 
 protected:
-  //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  void cpInNode()
-  //
-  // make a new node past current "_in" and that is a copy with all "explicit_set" to false
-  //
-  {
+  /** Creates a new node past the current `_in` position and copies the data at the current position to
+   * the new node, where all `explicit_set` are set to false as well.
+   **/
+  void cpInNode() {
     unsigned int next = _in;
     incIndex(next);
 
@@ -490,45 +510,71 @@ protected:
 };
 
 //-------------------------------------------------------------------------------------------------
+/**
+ * \brief Struct that enables array access through the `[]` operator for a particular part of `ParamsDelay`.
+ *
+ * This struct wraps a particular method pointer from `ParamsDelay` and a const pointer `ptr` to a `ParamsDelay` instance.
+ * By doing this extraction of data from the instance is neatly wrapped and allows for nice syntactic sugar,
+ * since the set property can be accessed for the specific frame using the `[]` operator.
+ *
+ * The accepted methods must have the signatur of `float ParamsDelay::foo(unsigned int) const`. This
+ * is intended for \ref ParamsDelay::getOverridenValue(unsigned int),
+ * \ref ParamsDelay::getInput(unsigned int), \ref ParamsDelay::getInputNoForced(unsigned int),
+ * \ref ParamsDelay::getOutputPrev(unsigned int), \ref ParamsDelay::getOutputNext(unsigned int) and
+ * ref ParamsDelay::getOutputLinInterp(unsigned int).
+ *
+ * \see ParamsDelay
+ **/
 struct ParamsDelayGet
     : public _PtrBase<const ParamsDelay>
-// params can be accessed as though they are an array from a particular point
-// (input, interp, curr or next positions) see GetXxx functions below
-//
+
 {
-  typedef float (ParamsDelay::*Fn)(VstParamIdx) const;
+  typedef float (ParamsDelay::*Fn)(unsigned int) const;
+
+  /** `ParamsDelay` Method that should  be called.**/
   Fn fn;
+
   ParamsDelayGet(const ParamsDelay& p, Fn f)
   {
     ptr = &p;
     fn = f;
   }
 
-  // allow access as though array
-  float operator[](VstParamIdx i) const { return (ptr->*fn)(i); }
+  float operator[](unsigned int i) const { return (ptr->*fn)(i); }
   float operator[](int i) const { return (ptr->*fn)(i); }
 };
 
 //-------------------------------------------------------------------------------------------------
 // access ParamsDelay as an array using these functions
 //
+
+
+/** Creates accessor for \ref ParamsDelay::getInput(unsigned int). **/
 inline ParamsDelayGet GetInput(const ParamsDelay& p)
 {
   return ParamsDelayGet(p, &ParamsDelay::getInput);
 }
+
+/** Creates accessor for \ref ParamsDelay::getInputNoForced(unsigned int). **/
 inline ParamsDelayGet GetInputNoForced(const ParamsDelay& p)
 {
   return ParamsDelayGet(p, &ParamsDelay::getInputNoForced);
 }
-inline ParamsDelayGet GetPrev(const ParamsDelay& p)
+
+/** Creates accessor for \ref ParamsDelay::getOutputPrev(unsigned int). **/
+inline ParamsDelayGet GetOutputPrev(const ParamsDelay& p)
 {
   return ParamsDelayGet(p, &ParamsDelay::getOutputPrev);
 }
-inline ParamsDelayGet GetNext(const ParamsDelay& p)
+
+/** Creates accessor for \ref ParamsDelay::getOutputNext(unsigned int). **/
+inline ParamsDelayGet GetOutputNext(const ParamsDelay& p)
 {
   return ParamsDelayGet(p, &ParamsDelay::getOutputNext);
 }
-inline ParamsDelayGet GetInterp(const ParamsDelay& p)
+
+/** Creates accessor for \ref ParamsDelay::getOutputLinInterp(unsigned int). **/
+inline ParamsDelayGet GetOutputLinInterp(const ParamsDelay& p)
 {
   return ParamsDelayGet(p, &ParamsDelay::getOutputLinInterp);
 }

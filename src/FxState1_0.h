@@ -40,16 +40,18 @@ class DtBlkFxAudioProcessor;
 class MorphParamEdit;
 
 //-------------------------------------------------------------------------------------------------
-class FxState1_0 //: public wxEvtHandler
-//
-// param state & run-time temp stuff for each 1.0 effect is stored in this thing that is in turn
-// stored inside DtBlkFx
-//
-// also contains GUI stuff
-//
+/** \brief This class contains the state of one Effect, including parameters.
+ *
+ * The object is intended to be stored inside a \ref DtBlkFxAudioProcessor instance.
+ *
+ * \see FxRun1_0, DtBlkFxAudioProcessor
+ **/
+class FxState1_0
 {
 public:
-  // call init before use
+  /**
+  * Initializes the state by setting the parent to `b` and the selected `fx_set`.
+  **/
   void init(DtBlkFxAudioProcessor* b, unsigned int fx_set);
 
   bool /*true=printed*/ getParamDisplay(BlkFxParam::SplitParamNum& p, float v, Rng<char> str);
