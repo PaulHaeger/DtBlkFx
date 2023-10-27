@@ -316,20 +316,20 @@ public:
   ParamsDelay _params;
 
   // get value of vst param
-  float /*0..1*/ getVstParamVal(ParamsDelayGetFn get_fn, VstParamIdx idx)
+  float /*0..1*/ getParamValue(ParamsDelayGetConstructorFn get_fn, unsigned int idx)
   {
     return idx < 0 ? 0.0f : (*get_fn)(_params)[idx];
   }
 
   // get morphed values using vst params (if need be)
-  int /*elements copied*/ get(ParamsDelayGetFn get_fn, const MorphParam* morph,
+  int /*elements copied*/ get(ParamsDelayGetConstructorFn get_fn, const MorphParam* morph,
           Rng<float> result, unsigned int param_idx = 0)
   {
     return morph->get((*get_fn)(_params), result, param_idx);
   }
 
   // get single morphed param value using vst param (if need be)
-  float get(ParamsDelayGetFn get_fn, const MorphParam* morph, unsigned int param_idx = 0)
+  float get(ParamsDelayGetConstructorFn get_fn, const MorphParam* morph, unsigned int param_idx = 0)
   {
     Array<float, 1> result;
     get(get_fn, morph, result, param_idx);
@@ -340,17 +340,17 @@ public: // preview access
   // during preview all params attached to the vst param will be output immediately
 
   //
-  bool isPreview(VstParamIdx idx) const { return idx < 0 ? false : _params.isOverridden(idx); }
+  bool isPreview(unsigned int idx) const { return idx < 0 ? false : _params.isOverridden(idx); }
 
   //
-  void setPreview(VstParamIdx idx, float val)
+  void setPreview(unsigned int idx, float val)
   {
     if (idx >= 0)
       _params.setOverride(idx, val);
   }
 
   //
-  void setPreviewState(VstParamIdx idx, bool state)
+  void setPreviewState(unsigned int idx, bool state)
   {
     if (idx >= 0)
       _params.setOverrideState(idx, state);
@@ -397,7 +397,7 @@ public:
   MorphParam _blk_mix_param;
 
   // which vst param index is in focus in the GUI
-  VstParamIdx _vst_param_idx_focus;
+  unsigned int _vst_param_idx_focus;
   void* _vst_param_idx_focus_cookie;
 
 

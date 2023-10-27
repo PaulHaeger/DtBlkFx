@@ -39,77 +39,111 @@ public:
     MODE_FIXED,      /** ignore vst_param_idx & always use `anchor_data[0]`.**/
     MODE_LIN_INTERP, /** linear interpolate morph data.**/
     MODE_STEP,       /** step morph data. **/
-    MODE_CLOSEST_ANCHOR = MODE_STEP
+    MODE_CLOSEST_ANCHOR = MODE_STEP /** Alias of `MODE_STEP`.**/
   };
 
 protected: // internals
-  // morph control point data is actually 2d in format [anchor idx][param idx]
+  /**¸\brief Morph control point data.
+   *
+   * In contigous 2d array format, meaning  `anchor_data[anchor idx][param idx]`
+   * is read with `anchor_data[param_n * anchor_idx + param_idx]`.
+   * The size will thus always be `anchor_n * param_n`.
+   **/
   std::valarray<float> anchor_data;
 
-  // number of morph anchor points (anchor_data.size() >= anchor_n*param_n)
+  /** Number of morph anchor points.**/
   unsigned int anchor_n;
 
-  // number of params
+  /** Number of params. **/
   unsigned int param_n;
 
-  // which vst param we're attached to
-  unsigned int vst_param_idx;
+  /** Parameter the object is attached to. **/
+  unsigned int plugin_param_idx;
 
-  // interpolation mode (see above)
+  /** Current Interpolation mode. For more see \ref MorphParam::Mode. **/
   Mode mode;
 
 public:
-  // auto cast to the mode
+  /** Gets the current Mode. **/
   Mode getMode() const { return mode; }
-  operator Mode() const { return mode; }
+
+  /** Allows for casting to `Mode` enum, returning the current mode.**/
+  explicit operator Mode() const { return mode; }
+
+  /** Sets the new mode. **/
   MorphParam& operator=(Mode mode_)
   {
     mode = mode_;
     return *this;
   }
 
+  /** Compares the current mode to the passed one.**/
+  bool operator==(Mode rhs) const {return mode == rhs;}
+
+  /** Sets the morph mode to `MODE_FIXED`. **/
   void setModeFixed() { mode = MODE_FIXED; }
-  void setModeLin(unsigned int vst_param_idx_)
+
+  /** Sets the Morph Mode to `MODE_LIN_INTERP` and sets the attached parameter id (`plugin_param_idx`).**/
+  void setModeLin(unsigned int param_idx_)
   {
-    vst_param_idx = vst_param_idx_;
+    plugin_param_idx = param_idx_;
     mode = MODE_LIN_INTERP;
   }
-  void setModeStep(unsigned int vst_param_idx_)
+
+  /** Sets the Morph Mode to `MODE_STEP` and sets the attached parameter id (`plugin_param_idx`).**/
+  void setModeStep(unsigned int param_idx_)
   {
-    vst_param_idx = vst_param_idx_;
+    plugin_param_idx = param_idx_;
     mode = MODE_STEP;
   }
 
 public:
+  /** Default Constructor. Sets the mode to `MODE_FIXED` and the number of anchors and parameters to 1.
+   **/
   MorphParam()
-  // default to fixed, 1 param and 1 morph point
   {
     setModeFixed();
     param_n = 1;
     anchor_n = 1;
-    vst_param_idx = 0;
+    plugin_param_idx = 0;
     anchor_data.resize(/*num params*/ param_n * anchor_n, /*value*/ 0);
   }
 
-  // access methods
-  int /*-1 if in MODE_FIXED*/ vstParamIdx() const
+  /** Gets the current ParamId of the parameter the object is attached to.
+   *
+   * \return The id or `-1` if the mode is set to `MODE_FIXED`.
+   **/
+  int /*-1 if in MODE_FIXED*/ getParamId() const
   {
-    return mode == MODE_FIXED ? -1 : vst_param_idx;
+    return mode == MODE_FIXED ? -1 : plugin_param_idx;
   }
 
+  /** Returns the number of params. **/
   unsigned int numParams() const { return param_n; }
+
+  /** Returns the number of anchor points. **/
   unsigned int numAnchorPoints() const { return anchor_n; }
 
-  // set morph table size
+  /** \brief Sets the number of anchor points.
+   *
+   *  If the number of anchor points is larger than before, the
+   *  internal array will be resized to fit. If the number of anchor
+   *  points is less, then the array will not be resized.
+   **/
   void setNumAnchorPoints(unsigned int n)
   {
     // only grow (so data is not lost if shrunk)
-    if (n > anchor_n)
+    if (n > anchor_n){
       anchor_data.resize(n * param_n, 0.0f);
+    }
     anchor_n = n;
   }
 
-  // set the number of params
+  /** \brief Sets the number of parameters.
+   *
+   * The internal array will always be resized and
+   * all the data that can be preserved will be preserved.
+   **/
   void setNumParams(unsigned int n)
   {
     unsigned int old_param_n = param_n;
@@ -121,12 +155,24 @@ public:
 
     // copy old morph params across
     size_t bytes_cpy = sizeof(float) * std::min(old_param_n, param_n);
-    for (unsigned int i = 0; i < anchor_n; i++)
+    for (unsigned int i = 0; i < anchor_n; ++i){
       memcpy(anchorData(i), begin(old_anchor_data) + i * old_param_n, bytes_cpy);
+    }
   }
 
   // set all morph points from "src_data", src data must be contiguous 2d array
   // in format [anchor_idx][param_idx]
+  /** \breif Sets all morph points.
+   *
+   * The source data passed must be a flat 2d array in the form of \ref MorphParam::anchorData.
+   * That means `anchor_data[anchor idx][param idx] will be accessed in the form of
+   * `anchor_data[anchor_idx * param_n + param_idx]`.
+   *
+   * The container `anchor_data` will always be resized to hold all datapoints.
+   *
+   * \param src_data source data that this method copies from.
+   * \param param_n_ Number of params per anchor point. Anchor size is computed on the fly.
+   **/
   void setAll(Rng<float> src_data, unsigned int param_n_ = 1)
   {
     param_n = param_n_;
@@ -135,24 +181,24 @@ public:
     src_data.copyTo(begin(anchor_data));
   }
 
-  // return anchor array for a particular param
+  /** \brief Returns an accessor for the particular anchor array at `param_idx`.
+   *
+   * The returned accesor `MorphParamArrayAccess` has `operator[size_t]` overloaded
+   * that allows direct array access to the parameters.
+   **/
   MorphParamArrayAccess anchorArray(unsigned int param_idx = 0)
   {
-    MorphParamArrayAccess a;
-    a.morph = this;
-    a.idx_is_anchor = false;
-    a.idx = param_idx;
-    return a;
+    return {this, /*idx*/ param_idx, /*is_anchor*/ false};
   }
 
-  // return array for a particular morph set
+  /** \brief Returns an accessor for the anchors at parameter `anchor_idx`.
+   *
+   * The returned accesor `MorphParamArrayAccess` has `operator[size_t]` overloaded
+   * that allows direct array access to the parameters.
+   **/
   MorphParamArrayAccess paramArray(unsigned int anchor_idx = 0)
   {
-    MorphParamArrayAccess a;
-    a.morph = this;
-    a.idx_is_anchor = true;
-    a.idx = anchor_idx;
-    return a;
+    return {this, /*idx*/ anchor_idx, /*is_anchor*/ true};
   }
 
   // limit anchor index
@@ -212,13 +258,15 @@ public:
     anchorData(anchor_idx)[limitParamIdx(param_idx)] = value;
   }
 
-  // get morph data given the control param
-  int                    /*num values written*/
-  get(float morph_pos,   // control position of morph (ignored if MODE_FIXED), 0..1
-      Rng<float> result, // destination
-      unsigned int param_idx,     // first index of param to return
-      int /*Mode*/ mode_ // force a different mode
-      ) const
+  /** Get morph data given the control param with forced mode.
+   *
+   *  \return num values written.
+   *  \param[in] float control position of morph (ignored if MODE_FIXED), 0..1.
+   *  \param[out] result destination.
+   *  \param[in] param_idx first index of param to return.
+   *  \param[in] mode_  Mode to be forced.
+   **/
+  int get(float morph_pos, Rng<float> result, unsigned int param_idx, int mode_) const
   {
     unsigned int max_n = param_n - param_idx;
     if (result.n > max_n)
@@ -255,7 +303,13 @@ public:
     return result.n;
   }
 
-  // see get() above, use current mode
+  /** Get morph data given the control param. Uses the currently set mode.
+   *
+   *  \return num values written.
+   *  \param[in] float control position of morph (ignored if MODE_FIXED), 0..1.
+   *  \param[out] result destination.
+   *  \param[in] param_idx first index of param to return.
+   **/
   int get(float morph_pos, Rng<float> result, unsigned int param_idx = 0) const
   {
     return get(morph_pos, result, param_idx, mode);
@@ -277,9 +331,9 @@ public:
   //     my_param.update(my_paramsdelay.getInterpFn(), /*out*/result);
   //
   template <class T>
-  int /*elements copied*/ get(const T& vst_param_array, Rng<float> result, unsigned int param_idx = 0) const
+  int /*elements copied*/ get(const T& param_array, Rng<float> result, unsigned int param_idx = 0) const
   {
-    return get(mode != MODE_FIXED ? vst_param_array[vst_param_idx] : 0.0f, result, param_idx);
+    return get(mode != MODE_FIXED ? param_array[plugin_param_idx] : 0.0f, result, param_idx);
   }
 
   // get a single param
@@ -327,12 +381,16 @@ public:
   operator MorphParam*() { return this; }
 };
 
+inline bool operator==(MorphParam::Mode lhs, const MorphParam& rhs){
+    return rhs == lhs;
+}
+
 //-------------------------------------------------------------------------------------------------
 // allow MorphParam to be used as a vstparam index
 // make sure that you check that vstParamIdx() is != -1 before passing
 inline int toVstParamIdx(const MorphParam& morph)
 {
-  return morph.vstParamIdx();
+  return morph.getParamId();
 }
 inline int toVstParamIdx(const MorphParam* morph)
 {
@@ -342,22 +400,25 @@ inline int toVstParamIdx(const MorphParam* morph)
 //-------------------------------------------------------------------------------------------------
 inline size_t MorphParamArrayAccess::size()
 {
-  if (idx_is_anchor)
+  if (idx_is_anchor){
     return morph->numParams();
+  }
   return morph->numAnchorPoints();
 }
 
 inline float MorphParamArrayAccess::operator[](size_t i) const
 {
-  if (idx_is_anchor)
+  if (idx_is_anchor){
     return morph->get(idx, i);
+  }
   return morph->get(static_cast<unsigned int>(i), idx);
 }
 
 inline float& MorphParamArrayAccess::operator[](size_t i)
 {
-  if (idx_is_anchor)
+  if (idx_is_anchor){
     return morph->anchorData(idx, i);
+  }
   return morph->anchorData(i, idx);
 }
 

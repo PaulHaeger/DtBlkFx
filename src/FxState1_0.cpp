@@ -119,7 +119,7 @@ bool /*true=printed*/ FxState1_0::getParamDisplay(BlkFxParam::SplitParamNum& p, 
   using namespace BlkFxParam;
 
   // check whether our param is attached to the vst param
-  if (_param[p.fx_param].vstParamIdx() != p.param)
+  if (_param[p.fx_param].getParamId() != p.param)
     return false;
 
   // get value after morph

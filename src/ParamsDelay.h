@@ -580,6 +580,6 @@ inline ParamsDelayGet GetOutputLinInterp(const ParamsDelay& p)
 }
 
 // above functions match this type
-typedef ParamsDelayGet (*ParamsDelayGetFn)(const ParamsDelay&);
+typedef ParamsDelayGet (*ParamsDelayGetConstructorFn)(const ParamsDelay&);
 
 #endif
