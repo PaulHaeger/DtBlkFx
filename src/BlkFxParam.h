@@ -31,10 +31,30 @@ General Public License for more details.
 #include <stdexcept>
 
 // namespace to hold stuff to do with vst params used in dt blkfx
+
+/**
+ * Namespace containing everything associated with the plugin parameters used in DtBlkFx.
+ **/
 namespace BlkFxParam {
     using namespace juce;
 
-    // parameter values
+    /**
+    * \brief Enum that contains the plugin ids for the parameters as well as the number of parameters.
+    *
+    * The first set is for the  global parameters, giving the associated ids.
+    * The last entry of the set `NUM_GLOBAL_PARAMS` tells how many global params there are.
+    *
+    * The second set is for the parameters of one FX set. Each entry gives the local index for
+    * the different parameters. The last entry `NUM_FX_PARAMS` tells how many parameters there are per FX set.
+    *
+    * `NUM_FX_SETS` says how many FX sets there are in total for this plugin.
+    * `TOTAL_NUM` contains the total number of plugin parameters for the plug in.
+    *
+    * `TIKS_PER_BEAT` contain how many time ticks per beat there are for the interpolation.
+    *
+    * `AUDIO_CHANNELS` contains the number of audio channels.
+    * \warning `AUDIO_CHANNELS` may be removed in the future if the number of channels is decided at runtime.
+    **/
     typedef enum {
       // global params that apply to all fx
       MIX_BACK = 0, // original mix back fraction & power match control
@@ -68,9 +88,14 @@ namespace BlkFxParam {
 #endif
     } constants;
 
-    //parameter Layout
+    /** Function that generates the parameter layout for the plugin.
+     **/
     AudioProcessorValueTreeState::ParameterLayout generateParameterLayout();
 
+    /* Array that makes it possible to recover the associated Identifier
+     * for a particular parameter index. May be necessary to address
+     * parameters stored in a `AudioProcessorValueTreeState`.
+     **/
     const std::array<juce::Identifier, TOTAL_NUM> paramsIds = {
         /*-----Global Parameters-------*/
         Identifier("MIX_BACK"),

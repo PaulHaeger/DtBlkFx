@@ -27,8 +27,14 @@ struct MorphParamArrayAccess
 
 //-------------------------------------------------------------------------------------------------
 /**
- * each morph param has a particular number of points that are interpolated using
- * a vst-param as an index so as to produce the final param
+ * Each morph param has a particular number of points that are interpolated using
+ * a plugin param as an index so as to produce the final param.
+ *
+ * This Class is used to Morph Parameter Values, which are between 0 and 1 to more complex and arbitrary
+ * behavoir. For example for processing you may want a value for a parameter to move from 0 to 1 and then
+ * back to zero again. This would be done with `float vals[] = {0, 1, 0}; morph.setAll(toRng(vals));
+ * Of course more complicated and arbitrary functions are possible as well, like a windowing function used
+ * for dsp.
  **/
 class MorphParam
 
@@ -113,7 +119,7 @@ public:
    *
    * \return The id or `-1` if the mode is set to `MODE_FIXED`.
    **/
-  int /*-1 if in MODE_FIXED*/ getParamId() const
+  int getParamId() const
   {
     return mode == MODE_FIXED ? -1 : plugin_param_idx;
   }
@@ -160,9 +166,7 @@ public:
     }
   }
 
-  // set all morph points from "src_data", src data must be contiguous 2d array
-  // in format [anchor_idx][param_idx]
-  /** \breif Sets all morph points.
+  /** \brief Sets all morph points.
    *
    * The source data passed must be a flat 2d array in the form of \ref MorphParam::anchorData.
    * That means `anchor_data[anchor idx][param idx] will be accessed in the form of
@@ -201,72 +205,132 @@ public:
     return {this, /*idx*/ anchor_idx, /*is_anchor*/ true};
   }
 
-  // limit anchor index
+  /** Limits the given anchor index to the  range of possible values. Returns the clamped index.**/
   unsigned int limitAnchorIdx(unsigned int anchor_idx) const { return limit_range(anchor_idx, 0, anchor_n - 1); }
 
+  /** Limits the given parameter index to the  range of possible values. Returns the clamped index.**/
   unsigned int limitParamIdx(unsigned int param_idx) const { return limit_range(param_idx, 0, param_n - 1); }
 
-  // get params morph data for a particular anchor index (data is param_n long)
+  /**
+   * \brief Gets the parameter morph data for a particular anchor index. Const version.
+   *
+   * The returned array is `param_n` long. The passed index is clamped to the possible values.
+   **/
   const float* anchorData(unsigned int anchor_idx) const
   {
     const float* it = std::begin(anchor_data);
     return it + limitAnchorIdx(anchor_idx) * param_n;
   }
 
+  /**
+   * \brief Gets the parameter morph data for a particular anchor index.
+   *
+   * The returned array is `param_n` long. The passed index is clamped to the possible values.
+   **/
   float* anchorData(unsigned int anchor_idx)
   {
     float* it = std::begin(anchor_data);
     return it + limitAnchorIdx(anchor_idx) * param_n;
   }
 
+  /**
+   * \brief Gets the parameter morph data for a particular anchor index and parameter.
+   *
+   * \param[in] anchor_idx the index of the particular anchor point. Will be clamped into the `0..anchor_n-1` range.
+   * \param[in] param_idx the index of the desired parameter. This is NOT bounds checked!
+   * \return A reference to the stored value.
+   **/
   float& anchorData(unsigned int anchor_idx, unsigned int param_idx) {
       return anchorData(anchor_idx)[param_idx];
   }
 
-  // given a fraction, return closest anchor idx
+  /** \brief This method is given a fraction and will return the
+   *  closest value.
+   *
+   *  \param[in] idx_f A value between 0 and 1. Will be clamped if necessary.
+   *
+   * \return The returned value is picked by the equation `(int)(idx_f * (anchor_n-1))`.
+   * Returned values are clamped between `0..anchor_n-1`.
+   **/
   unsigned int closestAnchorIdx(float /*0..1*/ idx_f) const
   {
     return RndToUInt(lin_interp_limit(idx_f, 0.0f, static_cast<float>(anchor_n) - 1));
   }
 
-  // find what fraction a particular anchor index corresponds to
+  /** \brief Calculates the fraction that belongs to a particular anchor index.
+   *
+   * \param[in] anchor_idx The particular anchor index. The input is clamped if necessary.
+   *
+   * \return If the number of anchors is 1, then `0.5f` is returned,  else the fraction is calculated by `anchor_idx/(anchor_n-1)`.
+   * Output will alway be in `0..1`.
+   **/
   float /*0..1*/ anchorIdxToFrac(unsigned int anchor_idx) const
   {
     return anchor_n > 1 ? static_cast<float>(limitAnchorIdx(anchor_idx)) / (static_cast<float>(anchor_n) - 1) : 0.5f;
   }
 
-  // return anchor data from rounded morph position (equivalent to MODE_STEP)
+  /** \brief Returnes the closest morph data for the anchor index that is closest to the given fraction. Const version.
+   *
+   * The output array has the length `param_n`. This is equivalent to using `MODE_STEP`.
+   *
+   * \param idx_f A fraction in `0..1`. Clamped if necessary.
+   *
+   * \return A pointer to the morph data.
+   *
+   * \see MorphParam::Mode
+   **/
   const float* closestAnchorData(float /*0..1*/ idx_f) const
   {
     return anchorData(closestAnchorIdx(idx_f));
   }
 
+  /** \brief Returnes the closest morph data for the anchor index that is closest to the given fraction.
+   *
+   * The output array has the length `param_n`. This is equivalent to using `MODE_STEP`.
+   *
+   * \param idx_f A fraction in `0..1`. Clamped if necessary.
+   *
+   * \return A pointer to the morph data.
+   *
+   * \see MorphParam::Mode
+   **/
   float* closestAnchorData(float /*0..1*/ idx_f)
   {
     return anchorData(closestAnchorIdx(idx_f));
   }
 
-  // get a particular anchor point
-  float get(unsigned int anchor_idx, unsigned int param_idx = 0) const
+  /** \brief Gets the morph data value for a particular anchor index and parameter index.
+   *
+   * \param[in] anchor_idx the particular anchor index. Will be clamped if necessary.
+   * \param[in] param_idx the particular param index. Will be clamped if necessary.
+   * \return The value at the selected point.
+   **/
+  float getMorphData(unsigned int anchor_idx, unsigned int param_idx = 0) const
   {
     return anchorData(anchor_idx)[limitParamIdx(param_idx)];
   }
 
-  // set a morph control point to "value"
-  void set(float value, unsigned int anchor_idx = 0, unsigned int param_idx = 0)
+  /** \brief Sets the value for a particular control point.
+   *
+   * \param[in] value the value to set.
+   * \param[in] anchor_idx the particular anchor index. Will be clamped if necessary.
+   * \param[in] param_idx the particular parameter. Will be clamped in necessary.
+   **/
+  void setMorphData(float value, unsigned int anchor_idx = 0, unsigned int param_idx = 0)
   {
     anchorData(anchor_idx)[limitParamIdx(param_idx)] = value;
   }
 
-  /** Get morph data given the control param with forced mode.
+  /** \brief Get morph data given the control param with forced mode.
    *
-   *  \return num values written.
    *  \param[in] float control position of morph (ignored if MODE_FIXED), 0..1.
    *  \param[out] result destination.
    *  \param[in] param_idx first index of param to return.
    *  \param[in] mode_  Mode to be forced.
+   *
+   *  \return number of values written.
    **/
-  int get(float morph_pos, Rng<float> result, unsigned int param_idx, int mode_) const
+  int getMorphDataArrayForced(float morph_pos, Rng<float> result, unsigned int param_idx, int mode_) const
   {
     unsigned int max_n = param_n - param_idx;
     if (result.n > max_n)
@@ -305,14 +369,15 @@ public:
 
   /** Get morph data given the control param. Uses the currently set mode.
    *
-   *  \return num values written.
    *  \param[in] float control position of morph (ignored if MODE_FIXED), 0..1.
    *  \param[out] result destination.
    *  \param[in] param_idx first index of param to return.
+   *
+   *  \return Number of values written.
    **/
-  int get(float morph_pos, Rng<float> result, unsigned int param_idx = 0) const
+  int getMorphDataArray(float morph_pos, Rng<float> result, unsigned int param_idx = 0) const
   {
-    return get(morph_pos, result, param_idx, mode);
+    return getMorphDataArrayForced(morph_pos, result, param_idx, mode);
   }
 
   // get results using morph param out of "vst_param_array"
@@ -331,16 +396,16 @@ public:
   //     my_param.update(my_paramsdelay.getInterpFn(), /*out*/result);
   //
   template <class T>
-  int /*elements copied*/ get(const T& param_array, Rng<float> result, unsigned int param_idx = 0) const
+  int /*elements copied*/ getMorphDataArray(const T& param_array, Rng<float> result, unsigned int param_idx = 0) const
   {
-    return get(mode != MODE_FIXED ? param_array[plugin_param_idx] : 0.0f, result, param_idx);
+    return getMorphDataArray(mode != MODE_FIXED ? param_array[plugin_param_idx] : 0.0f, result, param_idx);
   }
 
   // get a single param
   template <class T> float getSingle(T& t /*float 0..1 or array of float*/, unsigned int param_idx = 0) const
   {
     Array<float, 1> r;
-    get(t, /*out*/ r, param_idx);
+    getMorphDataArray(t, /*out*/ r, param_idx);
     return r[0];
   }
 
@@ -360,7 +425,7 @@ public:
       // state is directly anchor index
       if (state >= anchor_n)
         return false; // no more points
-      x = get(state, param);
+      x = getMorphData(state, param);
       y = 1.0f - anchorIdxToFrac(state);
       state++;
       return true;
@@ -369,7 +434,7 @@ public:
     // MODE STEP
     if (state >= anchor_n * 2)
       return false;
-    x = get(state / 2, param);
+    x = getMorphData(state / 2, param);
     float y_stp = 1.0f / static_cast<float>(anchor_n - 1);
     float y_mult = (static_cast<float>(state) + 1) / 2 - 0.5f;
     y = limit_range(y_stp * y_mult, 1.0f, 0.0f);
@@ -385,19 +450,24 @@ inline bool operator==(MorphParam::Mode lhs, const MorphParam& rhs){
     return rhs == lhs;
 }
 
-//-------------------------------------------------------------------------------------------------
-// allow MorphParam to be used as a vstparam index
-// make sure that you check that vstParamIdx() is != -1 before passing
-inline int toVstParamIdx(const MorphParam& morph)
+/** \brief Allows the MorphParam instance to be used as a parameter index.
+ *
+ * \note Make sure that MorphParam::getParamId() does not return -1 beforehand.
+ **/
+inline int toParamIndex(const MorphParam& morph)
 {
   return morph.getParamId();
 }
-inline int toVstParamIdx(const MorphParam* morph)
+
+/** \brief Allows the MorphParam instance to be used as a parameter index.
+ *
+ * \note Make sure that MorphParam::getParamId() does not return -1 beforehand.
+ **/
+inline int toParamIndex(const MorphParam* morph)
 {
-  return toVstParamIdx(*morph);
+  return toParamIndex(*morph);
 }
 
-//-------------------------------------------------------------------------------------------------
 inline size_t MorphParamArrayAccess::size()
 {
   if (idx_is_anchor){
@@ -409,9 +479,9 @@ inline size_t MorphParamArrayAccess::size()
 inline float MorphParamArrayAccess::operator[](size_t i) const
 {
   if (idx_is_anchor){
-    return morph->get(idx, i);
+    return morph->getMorphData(idx, i);
   }
-  return morph->get(static_cast<unsigned int>(i), idx);
+  return morph->getMorphData(static_cast<unsigned int>(i), idx);
 }
 
 inline float& MorphParamArrayAccess::operator[](size_t i)

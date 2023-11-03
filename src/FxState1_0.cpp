@@ -45,7 +45,7 @@ FxRun1_0* FxState1_0::getFxRun(bool for_display)
 {
   // don't interpolate effect type when for_display===false
   //
-  float fx_type_param = _b->get(for_display ? &GetInput : &GetOutputPrev, _param[BlkFxParam::FX_TYPE]);
+  float fx_type_param = _b->getValueMorphed(for_display ? &GetInput : &GetOutputPrev, _param[BlkFxParam::FX_TYPE]);
   //juce::Logger::writeToLog(juce::String("FxState1_0::getFxRun, Slot ") + juce::String(this->_fx_set) + ", fx_type_param=" + juce::String(fx_type_param));
 
   //
@@ -99,14 +99,14 @@ void FxState1_0::prepare()
 
   // copy param values to temporaries
   //
-  temp.amp_param = _b->get(&GetOutputLinInterp, _param[FX_AMP]);
-  temp.val = _b->get(&GetOutputLinInterp, _param[FX_VAL]);
+  temp.amp_param = _b->getValueMorphed(&GetOutputLinInterp, _param[FX_AMP]);
+  temp.val = _b->getValueMorphed(&GetOutputLinInterp, _param[FX_VAL]);
 
   temp.amp = BlkFxParam::getEffectAmpMult(temp.amp_param, temp.fft_fx->ampMixMode());
 
   // freq stuff
   for (unsigned int i = 0; i < 2; ++i) {
-    temp.freq_param[i] = _b->get(&GetOutputLinInterp, _param[i]);
+    temp.freq_param[i] = _b->getValueMorphed(&GetOutputLinInterp, _param[i]);
     temp.fbin[i] = _b->getFFTBin(temp.freq_param[i]);
     temp.bin[i] = RndToInt(temp.fbin[i]);
   }

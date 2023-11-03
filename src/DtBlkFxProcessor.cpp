@@ -491,6 +491,7 @@ void DtBlkFxAudioProcessor::configParams1_0()
   _param_morph_mode = false;
 
   _mixback_param.setModeLin(BlkFxParam::MIX_BACK);
+  //Set data with 3 anchor points and 1 param
   float mixback_data[] = {0, 1, 0};
   _mixback_param.setAll(TO_RNG(mixback_data));
 
@@ -524,7 +525,7 @@ void DtBlkFxAudioProcessor::configParams1_0()
   _blk_mix_param.setAll(TO_RNG(blk_mix_data), /*param_n*/ 2);
 
   _blk_shoulder_frac_param.setModeFixed();
-  _blk_shoulder_frac_param.set(/*value*/ 0, /*morph_idx*/ 0);
+  _blk_shoulder_frac_param.setMorphData(/*value*/ 0, /*morph_idx*/ 0);
 
   // window applied to shoulder (only applicable when _blk_shoulder_frac_param is > 0)
   _blk_shoulder_wdw_param.setModeFixed();
@@ -546,7 +547,7 @@ void DtBlkFxAudioProcessor::configParams1_0()
   for (unsigned i = 0; i < wdw_n; i++) {
     float r[4] = {0.5f - 0.5f * cosf(a[0]), sinf(a[1]), a[2], a[3]};
     for (int j = 0; j < 4; j++) {
-      _blk_shoulder_wdw_param.set(r[j], /*anchor idx*/ j, /*param idx*/ i);
+      _blk_shoulder_wdw_param.setMorphData(r[j], /*anchor idx*/ j, /*param idx*/ i);
       a[j].next();
     }
   }
@@ -713,16 +714,16 @@ void DtBlkFxAudioProcessor::guessFFTLen(int& /*return*/ freq_fft_n, int& /*retur
 //
 {
   // get the delay in samples
-  long delay_n = getDelaySamps(get(&GetInput, _delay_param));
+  long delay_n = getDelaySamps(getValueMorphed(&GetInput, _delay_param));
 
   // get the fft length in samples
-  int plan = BlkFxParam::getPlan(get(&GetInput, _fft_len_param));
+  int plan = BlkFxParam::getPlan(getValueMorphed(&GetInput, _fft_len_param));
 
   freq_fft_n = g_fft_sz[plan];
 
   // get time length based on shoulder fraction
   time_fft_n =
-      static_cast<int>(static_cast<float>(freq_fft_n) * lin_interp(get(&GetInput, _blk_shoulder_frac_param), 1.0f, .25f));
+      static_cast<int>(static_cast<float>(freq_fft_n) * lin_interp(getValueMorphed(&GetInput, _blk_shoulder_frac_param), 1.0f, .25f));
 
   // is the blk longer than the delay? if so reduce blk length
   if (time_fft_n > delay_n) {
@@ -871,7 +872,7 @@ inline void DtBlkFxAudioProcessor::paramsChkSync()
     if (param_fwd > _min_blk_fwd_samps && _params.isAnyExplicitSet(/*next*/ true)) {
 
       // should we sync the fft blk with param?
-      if (get(&GetOutputLinInterp, _param_sync_param) > 0.5f) {
+      if (getValueMorphed(&GetOutputLinInterp, _param_sync_param) > 0.5f) {
         _next_blk_fwd_n = param_fwd;
         _params_state = PARAMS_NONINTERP;
         juce::Logger::outputDebugString(juce::String("Param sync, abs_pos=")  + juce::String(_blk_samp_abs) + juce::String(param_fwd));
@@ -911,19 +912,19 @@ inline void DtBlkFxAudioProcessor::paramsChk()
   }
 
   // number of samples to do fft blk
-  _plan = BlkFxParam::getPlan(get(&GetOutputLinInterp, _fft_len_param));
+  _plan = BlkFxParam::getPlan(getValueMorphed(&GetOutputLinInterp, _fft_len_param));
   _freq_fft_n = g_fft_sz[_plan];
 
   // this is how much of the blk we want to process
   _time_fft_n =
-      static_cast<int>(static_cast<float>(_freq_fft_n) * lin_interp(get(&GetOutputLinInterp, _blk_shoulder_frac_param), 1.0f, .25f));
+      static_cast<int>(static_cast<float>(_freq_fft_n) * lin_interp(getValueMorphed(&GetOutputLinInterp, _blk_shoulder_frac_param), 1.0f, .25f));
 
   // center the data to be processed (this will be adjusted if there isn't enough data to fill
   // the blk)
   _data_pre_x0_n = (_freq_fft_n - _time_fft_n) / 2;
 
   // find (possible) output position of the current blk using current delay
-  _delay_n = getDelaySamps(get(&GetOutputLinInterp, _delay_param));
+  _delay_n = getDelaySamps(getValueMorphed(&GetOutputLinInterp, _delay_param));
   _dst_fft_abs = src_fft_abs + _delay_n;
 
   // make sure dest position isn't in data that we've already output (i.e. behind current sample
@@ -1009,7 +1010,7 @@ inline void DtBlkFxAudioProcessor::doFFT()
 
     // get the shoulder function to apply
     Array<float, 48> shoulder_fn;
-    int shoulder_fn_n = get(&GetOutputLinInterp, _blk_shoulder_wdw_param, shoulder_fn);
+    int shoulder_fn_n = getValuesMorphed(&GetOutputLinInterp, _blk_shoulder_wdw_param, shoulder_fn);
 
     for (i = 0; i < AUDIO_CHANNELS; i++) {
       // position within x0
@@ -1191,7 +1192,7 @@ for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
 }
 
 // power match amount
-float pwr_match = get(&GetOutputLinInterp, _pwr_match_param);
+float pwr_match = getValueMorphed(&GetOutputLinInterp, _pwr_match_param);
 
 // post process, work pwr out scaling
 for (i = 0; i < AUDIO_CHANNELS; i++) {
@@ -1427,12 +1428,12 @@ inline void DtBlkFxAudioProcessor::nextBlk()
 //
 {
   // get next blk forward
-  _next_blk_fwd_n = BlkFxParam::getBlkShiftFwd(get(&GetOutputLinInterp, _overlap_param), _time_fft_n);
+  _next_blk_fwd_n = BlkFxParam::getBlkShiftFwd(getValueMorphed(&GetOutputLinInterp, _overlap_param), _time_fft_n);
 
   // get the next overlap param to see if blksync is on
 
   // synchronize next blk to start-of-beat position if beat_sync
-  float beat_sync = get(&GetOutputLinInterp, _beat_sync_param) * _samps_per_beat;
+  float beat_sync = getValueMorphed(&GetOutputLinInterp, _beat_sync_param) * _samps_per_beat;
   if (beat_sync > /*arbitrary*/ 16) {
     // next blk sample position as determined from current overlap param
     long next_blk_samp_abs = _blk_samp_abs + _next_blk_fwd_n;
@@ -1526,10 +1527,10 @@ inline void DtBlkFxAudioProcessor::_process(const float* const* in_buf, long buf
 
     findBlkInPos();
 
-    _mixback = get(&GetOutputLinInterp, _mixback_param);
+    _mixback = getValueMorphed(&GetOutputLinInterp, _mixback_param);
 
     // blk mix update
-    _blk_mix_fn_n = get(&GetOutputLinInterp, _blk_mix_param, _blk_mix_fn);
+    _blk_mix_fn_n = getValuesMorphed(&GetOutputLinInterp, _blk_mix_param, _blk_mix_fn);
 
     if (_mixback >= 1.0f) {
       prepMixOut();

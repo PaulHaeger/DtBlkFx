@@ -321,18 +321,30 @@ public:
     return idx < 0 ? 0.0f : (*get_fn)(_params)[idx];
   }
 
-  // get morphed values using vst params (if need be)
-  int /*elements copied*/ get(ParamsDelayGetConstructorFn get_fn, const MorphParam* morph,
-          Rng<float> result, unsigned int param_idx = 0)
+  /** \brief Gets Morphed values using the parameters.
+   *
+   * \param[in] get_fn Accessor Function for the parameters.
+   * \param[in] morph MorphParam instance.
+   * \param[out] result Output of the morphed values
+   * \param[in] param_idx The parameter index from which we start copying.
+   *
+   * \return The number of elements copied into `result`.
+   * **/
+  int /*elements copied*/ getValuesMorphed(ParamsDelayGetConstructorFn get_fn,
+                                           const MorphParam* morph,
+                                           Rng<float> result,
+                                           unsigned int param_idx = 0)
   {
-    return morph->get((*get_fn)(_params), result, param_idx);
+    return morph->getMorphDataArray((*get_fn)(_params), result, param_idx);
   }
 
-  // get single morphed param value using vst param (if need be)
-  float get(ParamsDelayGetConstructorFn get_fn, const MorphParam* morph, unsigned int param_idx = 0)
+  /** Get a single morphed param value using parameter index.**/
+  float getValueMorphed(ParamsDelayGetConstructorFn get_fn,
+                        const MorphParam* morph,
+                        unsigned int param_idx = 0)
   {
     Array<float, 1> result;
-    get(get_fn, morph, result, param_idx);
+    getValuesMorphed(get_fn, morph, result, param_idx);
     return result[0];
   }
 
