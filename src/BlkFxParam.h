@@ -164,6 +164,10 @@ namespace BlkFxParam {
     const Identifier idNodeFX7("FX7");
     const Identifier idNodeFX8("FX8");
 
+    /** Returns an identifier for the parameter group the given parameter with
+     * Id `index` belongs to. In case the index is out of range a `std::runtime_error` is
+     * thrown.
+     **/
     inline const Identifier& getGroupForIndex(unsigned int index){
         //Global parameters
         if(index >= TOTAL_NUM){
@@ -221,6 +225,9 @@ namespace BlkFxParam {
     ValueTree loadFromLegacyFormat(AudioProcessorValueTreeState& apvts, const String& stingData);
 
 
+    /** Function used internally. Initializes a std::map that makes it possible
+     * to transform a parameter identifier to the corresponding index.
+     **/
     inline std::map<Identifier, unsigned int> createIdIndexMap() {
         std::map<Identifier, unsigned int> idMap;
         for (unsigned int i=0; i < paramsIds.size(); ++i) {
@@ -229,33 +236,48 @@ namespace BlkFxParam {
         return idMap;
     };
 
+    /** Maps that transforms a parameter identifier to the corresponding index. **/
     const std::map<Identifier, unsigned int> idIndexMap = createIdIndexMap();
 
 
-    // get the parameter offset given an fx set
+    /**\brief Get the parameter offset given an fx set.
+     *
+     * For the index of a fx_set it returns how many parameters were there before.
+     **/
     inline unsigned int paramOffs(unsigned int fx_set)
     {
       return NUM_GLOBAL_PARAMS + fx_set * NUM_FX_PARAMS;
     }
 
+    /** \brief Struct holding information about a parameter index.
+     *
+     * This struct makes it possible to query further information about
+     * a parameter id. For example with this you can determine if the parameter is
+     * global or belongs to a fx set, as well as the 'local' parameter index.
+     * This information is determined automatically be the struct.
+     **/
     struct SplitParamNum {
-      int param;      // original param number
-      bool ok;        // true if param is in range
-      int glob_param; // global param number or -1 if effect set
-      int fx_set;     // effect set or -1 if global
-      int fx_param;   // effect param or -1 if global
+      int param;      /** The index of the parameter. */
+      bool isOk;        /** Is `true` if the parameter index `param` is in range and thus valid.*/
+      int glob_param; /** If the index `param` belongs to a global parameter, it will contain 'local' index of the parameter. Else it will be `-1`, meaning the param belongs to an effect set or invalid. */
+      int fx_set;     /** If the index `param` belongs to an effect set, then this will contain
+     the index of the fx_set it belongs to. Else it will be `-1`, meaning the param is global or invalid.. */
+      int fx_param;   /** If the index `param` belongs to an effect set, this will contain the 'local' parameter index. Else it will be `-1`, meaning the param is global or invalid. */
 
+      /** This constructor determines all the extra information for
+       * a given parameter index.
+       **/
       SplitParamNum(int param_num)
       {
         param = param_num;
         fx_param = -1;
         glob_param = -1;
         fx_set = -1;
-        ok = false;
+        isOk = false;
         if (param_num < 0 || param_num >= TOTAL_NUM)
           return;
 
-        ok = true;
+        isOk = true;
         fx_set = param_num - NUM_GLOBAL_PARAMS;
         if (fx_set < 0) {
           // global param

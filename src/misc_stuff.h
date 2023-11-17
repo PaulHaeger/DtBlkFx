@@ -16,6 +16,7 @@ Free software!
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <juce_core/juce_core.h>
 
 #ifdef _DEBUG
 #  include <iostream>
@@ -704,8 +705,18 @@ public:
 
   // attempt to construct using toRng() conversion (for some reason we need to explicitly call
   // conversion)
-  template <typename T2> Rng(T2& src) {
+  template <typename T2>
+  Rng(T2& src) {
       *this = toRng(src).operator Rng<T>();
+  }
+
+  //Specialization for juce::String that gives a depreciation warning, so
+  //all instances where RNG is used as text can be found by using the compiler
+  [[depecated("juce::String converted to RNG<char>, please replace RNG<char> with juce::String")]] inline Rng(juce::String& src){
+    //#pragma message ("Warning: juce::String converted to RNG<char>, please replace RNG<char> with juce::String")
+      char* cpStr = reinterpret_cast<char*>(std::malloc(sizeof(char) * src.length()));
+      memcpy(cpStr, src.toRawUTF8(), sizeof(char)*src.length());
+      *this = toRng(cpStr, src.length()).operator Rng<T>();
   }
 
   void adjStart(size_t i)
@@ -1769,6 +1780,7 @@ struct RngPrintNumStruct
 {
   float v, min_unit, max_unit;
   CharRng print(Rng<char> dst) const;
+  juce::String& print(juce::String& dst) const;
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -1782,6 +1794,11 @@ inline RngPrintNumStruct sprnum(float v, float min_unit = 0.0f, float max_unit =
 
 //
 inline CharRng operator<<(CharRng dst, const RngPrintNumStruct& s)
+{
+  return s.print(dst);
+}
+
+inline juce::String& operator<<(juce::String dst, const RngPrintNumStruct& s)
 {
   return s.print(dst);
 }
@@ -1831,5 +1848,6 @@ inline PercentStruct spr_percent(float /*0..1*/ frac, int decimal_places = 0)
 }
 
 CharRng operator<<(CharRng dst, PercentStruct s);
+juce::String& operator<<(juce::String& dst, PercentStruct s);
 
 #endif

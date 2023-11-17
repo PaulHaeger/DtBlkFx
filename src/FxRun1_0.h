@@ -65,9 +65,13 @@ public:
   // DtBlkFx calls this to perform the FFT effect
   virtual void process(FxState1_0* s) {juce::ignoreUnused(s);}
 
-  // get the display text corresponding to "val"
-  virtual Rng<char> /*updated rng*/ dispVal(FxState1_0* s, Rng<char> /*out*/ text,
-                                            float /*0..1*/ val)
+  /** \brief Get the display text corresponding to "val".
+   *
+   * \pram[in] s the state of the current effect.
+   * \param[out] text the string to append the text to.
+   * \param[in] val the value to output.
+   **/
+  virtual juce::String& /*updated rng*/ dispVal(FxState1_0* s, juce::String& text, float /*0..1*/ val)
   {
       juce::ignoreUnused(s);
       juce::ignoreUnused(val);
@@ -93,7 +97,7 @@ public: // methods for the GUI
   {
     if (!idx_within(idx, _value_presets))
       return nullptr;
-    return _value_presets[idx].str;
+    return _value_presets[idx].str.toRawUTF8();
   }
 
   //
@@ -105,7 +109,7 @@ public: // methods for the GUI
 public: // internal stuff to do with value presets
   struct ValuePreset {
     float val;
-    CharArray<64> str;
+    juce::String str;
   };
 
   // internal method that uses display value to fill presets

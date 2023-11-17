@@ -40,9 +40,11 @@ class DtBlkFxAudioProcessor;
 class MorphParamEdit;
 
 //-------------------------------------------------------------------------------------------------
-/** \brief This class contains the state of one Effect, including parameters.
+/** \brief This class contains the state of one effect, including its parameters.
  *
  * The object is intended to be stored inside a \ref DtBlkFxAudioProcessor instance.
+ * The processing itself is carried out through polymorphism by an instance that is
+ * derived from \ref RxRun1_0.
  *
  * \see FxRun1_0, DtBlkFxAudioProcessor
  **/
@@ -54,35 +56,65 @@ public:
   **/
   void init(DtBlkFxAudioProcessor* b, unsigned int fx_set);
 
-  bool /*true=printed*/ getParamDisplay(BlkFxParam::SplitParamNum& p, float v, Rng<char> str);
+  /** \brief Generates a string meant for display for parameter `p` with value `v`.
+   *
+   * First the method will determine if the parameter id belongs to an effect. 
+   * If not `false` is returned. If the parameter is being used, then `v` will be
+   * morphed to the appropiate value. If the given parameter is currently
+   * unused "-" will be written into `str`.
+   * If the parameter is used by the effect, then an appropiate string
+   * giving the value in a human readable format will be written.
+   *
+   * E.g. if the the parameter is `FX_FREQ_A` then the string will be "xxxx[k]Hz".
+   * For `FX_AMP` the string is `xxx%` if mix_mode is used, "xxx dB" else and "-∞ dB"
+   * when the value is `0`.
+   * `FX_TYPE` will simply give the  name of the Effect and `FX_VAL` the value.
+   *
+   * \param[in] p the fx param to extract the info from.
+   * \param[in] v the value that should be transformed into human interpretable output.
+   * \param[out] str the string for which the output will be appended to.
+   * \return `true` if anything was written, `false` if not.
+   **/
+  bool getParamDisplay(BlkFxParam::SplitParamNum& p, float v, juce::String& outStr);
 
-  // called prior to process
+  /** \brief Prepares processing.
+  *
+  * Called before \ref FxState1_0::process is called.
+  * The current effect is loaded, the parameter values are morphed
+  * appropiately and data is written to the right places.
+  **/
   void prepare();
 
-  // perform the effect
+  /** Performs the effect.  **/
   void process() { temp.fft_fx->process(this); }
 
-  // get previous fx state from blkfx (or NULL)
+  /** Gets the previous effect state from the parent or `nullptr` if this is the first one in the list.*/
   FxState1_0* prevFxState();
 
-  // which fx set we are
-  unsigned int _fx_set;
+  unsigned int _fx_set; /** Tells to which effect set the state belongs. */
 
   // parent
   //TODO: Can this be replaced with smart pointers?
+  /** \ref DtBlkFxAudioProcessor the effect state is parented to. **/
   _Ptr<DtBlkFxAudioProcessor> _b;
 
   DtBlkFxAudioProcessor* blkfx() { return _b; }
 
   operator DtBlkFxAudioProcessor*() { return _b; }
 
+  /** Loads the currently set effect type from the parent and returns a pointer to the
+   * appropiate \ref FxRun1_0 instance. If `for_display` is set false, then
+   * the effect type parameter will not be interpolated beforehand.**/
   FxRun1_0* getFxRun(bool for_display = true);
 
 public: // parameters
-  MorphParam _param[BlkFxParam::NUM_FX_PARAMS];
+  MorphParam _param[BlkFxParam::NUM_FX_PARAMS]; /** Morphs for the different parameters inside the effect. */
 
   //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 public: // temporary variables used during processing
+
+  /** \brief This struct contains temporary values that are used during processing.
+   **/
   struct {
     // unprocessed freq param, 0..1
     Array<float, 2> freq_param;

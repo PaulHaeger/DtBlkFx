@@ -49,21 +49,22 @@ static struct CreateDestroy {
 using namespace NoteFreq;
 
 //------------------------------------------------------------------------------------------
-Rng<char> NoteToTxt(Rng<char> out_txt, float offs_c0)
+juce::String& NoteToTxt(juce::String& out_txt, float offs_c0)
 {
   // don't print freqs below c0
-  if (offs_c0 < 0)
+  if (offs_c0 < 0){
     return out_txt << "-";
+  }
 
   int close = RndToInt(offs_c0);
   int cents = (int)((offs_c0 - (float)close) * 100.0f);
   int octave = close / 12;
   int note12 = close - 12 * octave;
-  return out_txt << note_names_[note12] << octave << ":" << sprf("%+03d", cents);
+  return out_txt << note_names_[note12] << octave << ":" << juce::String::formatted("%+03d", cents);
 }
 
 //------------------------------------------------------------------------------------------
-float /*freq hz*/ NoteToHz(string note)
+float /*freq hz*/ NoteToHz(std::string note)
 {
   float cents = 0.0f;
   int colon_pos = note.find(":");

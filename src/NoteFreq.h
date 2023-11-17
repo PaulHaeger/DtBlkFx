@@ -56,11 +56,11 @@ inline float /*offset from c0*/ HzToNoteOffs(float hz)
 // conversion uses equal tempered scale
 
 // convert note offs from c0 to txt
-Rng<char> /*remaining string*/ NoteToTxt(Rng<char> out_txt, float offs_c0);
+juce::String& /*remaining string*/ NoteToTxt(juce::String& out_txt, float offs_c0);
 
 // convert hz to a string
 // maximum string printed is 8 characters (for non-ridiculous frequencies)
-inline Rng<char> /*remaining string*/ HzToNote(Rng<char> out_txt, float freq)
+inline juce::String& /*remaining string*/ HzToNote(juce::String& out_txt, float freq)
 {
   return NoteToTxt(out_txt, HzToNoteOffs(freq));
 }
@@ -84,7 +84,7 @@ inline NoteToTextStruct HzToNote(float freq)
   NoteToTextStruct r = {HzToNoteOffs(freq)};
   return r;
 }
-inline CharRng operator<<(CharRng dst, NoteToTextStruct s)
+inline juce::String& operator<<(juce::String& dst, NoteToTextStruct s)
 {
   return NoteToTxt(dst, s.offs_c0);
 }

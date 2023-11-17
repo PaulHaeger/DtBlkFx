@@ -44,7 +44,7 @@ long g_dbg_inst = 0;
 FxRun1_0* FxState1_0::getFxRun(bool for_display)
 {
   // don't interpolate effect type when for_display===false
-  //
+
   float fx_type_param = _b->getValueMorphed(for_display ? &GetInput : &GetOutputPrev, _param[BlkFxParam::FX_TYPE]);
   //juce::Logger::writeToLog(juce::String("FxState1_0::getFxRun, Slot ") + juce::String(this->_fx_set) + ", fx_type_param=" + juce::String(fx_type_param));
 
@@ -114,13 +114,14 @@ void FxState1_0::prepare()
 
 //-------------------------------------------------------------------------------------------------
 bool /*true=printed*/ FxState1_0::getParamDisplay(BlkFxParam::SplitParamNum& p, float v,
-                                                  Rng<char> str)
+                                                  juce::String& outStr)
 {
   using namespace BlkFxParam;
 
   // check whether our param is attached to the vst param
-  if (_param[p.fx_param].getParamId() != p.param)
+  if (_param[p.fx_param].getParamId() != p.param){
     return false;
+  }
 
   // get value after morph
   v = _param[p.fx_param](v);
@@ -130,7 +131,7 @@ bool /*true=printed*/ FxState1_0::getParamDisplay(BlkFxParam::SplitParamNum& p, 
 
   // is the param used?
   if (!fx_run->paramUsed(p.fx_param)) {
-    str << "-";
+    outStr += "-";
     return true;
   }
 
@@ -139,29 +140,30 @@ bool /*true=printed*/ FxState1_0::getParamDisplay(BlkFxParam::SplitParamNum& p, 
     case FX_FREQ_B: {
       // put in note & freq
       float freq_hz = _b->guessRoundHz(BlkFxParam::getHz(v));
-      str << sprnum(freq_hz, /*min unit*/ 1.0f) << "Hz";
+      outStr << sprnum(freq_hz, /*min unit*/ 1.0f) << "Hz";
       return true;
     }
 
     case FX_AMP: {
       bool mix_mode = fx_run->ampMixMode();
       float amp_mult = getEffectAmpMult(v, mix_mode);
-      if (mix_mode && amp_mult <= 1.0f)
-        str << RndToInt(amp_mult * 100.0f) << "%";
-      else if (amp_mult > 0)
-        str << sprf("%.1f dB", getEffectAmp(v));
-      else
-        str << "-inf dB";
+      if (mix_mode && amp_mult <= 1.0f){
+        outStr << RndToInt(amp_mult * 100.0f) << "%";
+      } else if (amp_mult > 0){
+        outStr << juce::String::formatted("%.1f dB", getEffectAmp(v));
+      } else{
+        outStr << u8"-∞ dB";
+      }
       return true;
     }
 
     case FX_TYPE: {
-      str << fx_run->name().toRawUTF8();
+      outStr << fx_run->name();
       return true;
     }
 
     case FX_VAL: {
-      fx_run->dispVal(this, /*out*/ str, v);
+      fx_run->dispVal(this, outStr, v);
       return true;
     }
   }

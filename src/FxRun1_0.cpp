@@ -140,7 +140,7 @@ void FxRun1_0::_fillValues(size_t num_presets, float out_min, float out_max, boo
     in_max--;
 
   // generate
-  for (size_t i = 0; i < num_presets; i++) {
+  for (size_t i = 0; i < num_presets; ++i) {
     size_t j = i + start_idx;
     _value_presets[j].val = lin_scale(static_cast<float>(i), /*in min*/ 0.0f, in_max, out_min, out_max);
     dispVal(/*fx state*/ NULL, /*out*/ _value_presets[j].str, _value_presets[j].val);
@@ -160,7 +160,7 @@ void FxRun1_0::_fillValues(Rng<float> values)
   for (size_t i = 0; i < values.n; i++) {
     _value_presets[j].val = values[i];
     dispVal(/*FxState1_0*/ nullptr, _value_presets[j].str, values[i]);
-    j++;
+   ++j;
   }
 }
 
@@ -677,7 +677,7 @@ public:
 };
 
 //*************************************************************************************************
-Rng<char> HarmDispVal(Rng<char> /*out*/ text, float /*0..1*/ val)
+juce::String& HarmDispVal(juce::String& /*out*/ text, float /*0..1*/ val)
 {
   const char* name[] = {" both", " odd", " even", " between"};
   SplitParam<4> h(val);
@@ -707,7 +707,7 @@ public:
     _params_used[BlkFxParam::FX_AMP] = false;
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return HarmDispVal(text, val);
   }
@@ -721,7 +721,7 @@ HarmMaskFx g_auto_subharm2_mask("ASubH2Mask", /*freq_b_param_used*/ true);
 HarmMaskFx g_auto_subharm3_mask("ASubH3Mask", /*freq_b_param_used*/ true);
 
 //*************************************************************************************************
-Rng<char> ThreshDispVal(Rng<char> /*out*/ text, float /*0..1*/ val)
+juce::String& ThreshDispVal(juce::String& /*out*/ text, float /*0..1*/ val)
 {
   const char* type[2] = {"above", "below"};
   SplitParam<2> split(val);
@@ -742,7 +742,7 @@ public:
     _fillValues(/*num*/ 5, /*min*/ 0.5f, /*max*/ 1.0f);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return ThreshDispVal(text, val);
   }
@@ -908,7 +908,7 @@ public:
     MaskedRun(s, harm);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return HarmDispVal(text, val);
   }
@@ -1038,7 +1038,7 @@ public:
     MaskedRun(s, contrast);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return text << spr_percent(val * 2 - 1);
   }
@@ -1086,7 +1086,7 @@ public:
     MaskedRun(s, smear);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return text << spr_percent(val);
   }
@@ -1118,7 +1118,7 @@ public:
     }
 }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return ThreshDispVal(text, val);
   }
@@ -1193,7 +1193,7 @@ public:
     MaskedRun(s, clip);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return text << spr_percent(val);
   }
@@ -1481,8 +1481,8 @@ void InitShiftValuePresets(FxRun1_0* run)
   // shift by these
   for (int i = 0; i < amt.n; i++) {
     run->_value_presets[j].val = amt[i] / 72.0f; // 6 octaves worth of notes
-    run->_value_presets[j].str << sprf("Change shift by %+d notes", (int)amt[i]);
-    j++;
+    run->_value_presets[j].str << juce::String::formatted("Change shift by %+d notes", (int)amt[i]);
+    ++j;
   }
 }
 
@@ -1524,9 +1524,9 @@ public:
     MaskedRun(s, shift);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
-    return text << sprf("%+.2f notes", ParamToOctave(val) * 12.0f);
+    return text << juce::String::formatted("%+.2f notes", ParamToOctave(val) * 12.0f);
   }
 
   virtual bool ampMixMode() { return true; }
@@ -1613,7 +1613,7 @@ public:
     MaskedRun(s, shift);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return text << sprnum(ConstShiftProcess::paramToHz(val), /*min unit*/ 1.0f) << "Hz";
   }
@@ -1645,7 +1645,7 @@ public:
     MaskedRun(s, harm);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return HarmDispVal(text, val);
   }
@@ -1735,7 +1735,7 @@ public:
     MaskedRun(s, resize);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     Param p(val);
     return text << spr_percent(p.f_part) << " time " << (p.i_part ? "rev" : "fwd");
@@ -1927,7 +1927,7 @@ public:
     HarmMatchProcess match(s, _data);
     AutoHarmMaskRun(s, match);
   }
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     SplitParam<2> v(val);
     return text << (v.i_part ? "copy0" : "scale") << "/" << spr_percent(v.f_part);
@@ -2063,11 +2063,11 @@ public:
     AutoHarmMaskRun(s, shift);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     // display octave shift as notes (semitones) shift
     float notes = ParamToOctave(val) * 12.0f;
-    return text << sprf("%+.2f notes", notes);
+    return text << juce::String::formatted("%+.2f notes", notes);
   }
 
   virtual bool ampMixMode() { return true; }
@@ -2108,8 +2108,8 @@ public:
     // shift target note by these
     for (int i = 0; i < amt.n; i++) {
       _value_presets[j].val = amt[i];
-      _value_presets[j].str << sprf("Change by %+d notes", static_cast<int>(amt[i]));
-      j++;
+      _value_presets[j].str << juce::String::formatted("Change by %+d notes", static_cast<int>(amt[i]));
+      ++j;
     }
   }
 
@@ -2140,8 +2140,7 @@ public:
       // bodge so that matching repitch only runs on the left channel
       HarmShiftProcess<1> shift(s, /*repitch*/ true);
       AutoHarmMaskRun(s, shift);
-    }
-    else
+    } else
 #endif
     {
       HarmShiftProcess<AUDIO_CHANNELS> shift(s, /*repitch*/ true);
@@ -2149,11 +2148,12 @@ public:
     }
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
 #ifdef STEREO
-    if (val >= 0.7f)
-      return text << sprf("right%+.2fnotes", lin_scale(val, 0.7f, 1.0f, -24, 24));
+    if (val >= 0.7f){
+      return text << juce::String::formatted("right%+.2fnotes", lin_scale(val, 0.7f, 1.0f, -24, 24));
+    }
 #endif
 
     float offs_c0 = val * BlkFxParam::noteSpan();
@@ -2217,11 +2217,11 @@ public:
     MaskedRun(s, resample);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     // display octave shift as notes (semitones) shift
     float notes = ParamToOctave(val) * 12.0f;
-    return text << sprf("%+.2f notes", notes);
+    return text << juce::String::formatted("%+.2f notes", notes);
   }
 
   virtual bool ampMixMode() { return true; }
@@ -2398,7 +2398,7 @@ public:
     b->_chan[1].total_in_pwr = b->_chan[0].total_in_pwr;
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     float mult = getMultFrac(val);
     if (mult > 0.0f)
@@ -2541,7 +2541,7 @@ public:
     b->_chan[1].total_in_pwr = b->_chan[0].total_in_pwr;
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     return HarmDispVal(text, val);
   }
@@ -2650,7 +2650,7 @@ public:
     MaskedRun(s, mix);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     SplitParam<2> sval(val);
     return text << spr_percent(1 - sval.f_part) << (sval.i_part ? "R on L" : "L on R");
@@ -2961,7 +2961,7 @@ public:
     MaskedRun(s, mix);
   }
 
-  virtual Rng<char> /*updated*/ dispVal(FxState1_0*, Rng<char> /*out*/ text, float /*0..1*/ val)
+  virtual juce::String& /*updated*/ dispVal(FxState1_0*, juce::String& /*out*/ text, float /*0..1*/ val)
   {
     SplitParam<2> sval(val);
     return text << RndToInt(sval.f_part * 100.0f) << " mode " << sval.i_part;
