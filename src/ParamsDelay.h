@@ -368,7 +368,7 @@ public: // parameter override (use for param preview)
   * \param value value that should be set for the parameter.
   * \return `true` if the param already exists, `false` if not.
   **/
-  bool /*already exists*/ putValueAt(long samp_abs_new, VstParamIdx idx, float value)
+  bool putValueAt(long samp_abs_new, unsigned int idx, float value)
   {
     bool already_exists = false;
     // does this param have the same time as the most recent one?
@@ -419,7 +419,7 @@ public: // parameter override (use for param preview)
    * \param[in] find_fraction if the fractional part should be recalculated if necessary.
    * \return `true` if the time was sucessfully set and `false` if not.
    **/
-  bool /*can interpolate*/ setOutputPos(long samp_abs_new, bool find_fraction = true)
+  bool setOutputPos(long samp_abs_new, bool find_fraction = true)
   {
     // look for params
     while (1) {

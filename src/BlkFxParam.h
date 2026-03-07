@@ -210,7 +210,7 @@ namespace BlkFxParam {
      *
      * \return The generated ValueTree.
      */
-    ValueTree generateValueTree(AudioProcessorValueTreeState& apvts);
+    ValueTree generateValueTree();
 
     /* \brief Loads the data from the old format.
      * This Function uses a reference to the apvts to construct the appropiate
@@ -222,7 +222,7 @@ namespace BlkFxParam {
      *
      * \return The read ValueTree
      */
-    ValueTree loadFromLegacyFormat(AudioProcessorValueTreeState& apvts, const String& stingData);
+    ValueTree loadFromLegacyFormat(const String& stingData);
 
 
     /** Function used internally. Initializes a std::map that makes it possible

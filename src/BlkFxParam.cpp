@@ -2,6 +2,7 @@
 #include "FxRun1_0.h"
 #include "rfftw_float.h"
 #include <sstream>
+#include "Legacy.h"
 
 extern const size_t g_num_fx_1_0; //Defined in FxRun1_0.h
 extern FxRun1_0* g_fft_fx_table[];
@@ -45,6 +46,7 @@ namespace BlkFxParam
         }
         auto ampAttributes = juce::AudioParameterFloatAttributes().withLabel("dB");
 
+        //Create the parameters for all the subgroups
         for(auto& subgroup : subgroups){
             auto prefix = subgroup->getID();
             subgroup->addChild(std::make_unique<AudioParameterFloat>(prefix + "_FREQ_A", "Frequency A", NormalisableRange<float>(0.f, 1.f), 0.f),
@@ -60,8 +62,11 @@ namespace BlkFxParam
         return params;
     };
 
-    ValueTree generateValueTree(AudioProcessorValueTreeState& apvts){
-        ValueTree baseTree = apvts.copyState();
+    ValueTree generateValueTree(){
+        ValueTree baseTree("Base");
+        for(const juce::Identifier& paramId : paramsIds){
+          baseTree.setProperty(paramId, 0.0f, nullptr);
+        }
         if(baseTree.isValid()){
             ValueTree programTree = baseTree.getOrCreateChildWithName(idNodeProgram, nullptr);
             //Create the program parameters
@@ -72,57 +77,42 @@ namespace BlkFxParam
         return baseTree;
     }
 
-    ValueTree loadFromLegacyFormat(AudioProcessorValueTreeState& apvts, const String& stringData){
-        ValueTree stateTree = generateValueTree(apvts);
-        if(stateTree.isValid()){
-            int nameEnd = stringData.indexOfChar(':');
-            if(nameEnd < 0){
-                //Not a single : found, we need to abort
-                juce::Logger::outputDebugString("Error in 'loadFromLegacyFormat': Name missing!");
-                return ValueTree();
+    ValueTree loadFromLegacyFormat(const String& stringData){
+        ValueTree stateTree = generateValueTree();
+        if(!stateTree.isValid()){
+              juce::Logger::outputDebugString("Error in 'loadFromLegacyFormat': Generated Tree is invalid!");
+              return ValueTree();
+        }
+        int nameEnd = stringData.indexOfChar(':');
+        if(nameEnd < 0){
+            //Not a single : found, we need to abort
+            juce::Logger::outputDebugString("Error in 'loadFromLegacyFormat': Name missing!");
+            return ValueTree();
+        }
+        // Save name to state
+        stateTree.getChildWithName(idNodeProgram).setProperty(idProgName, stringData.substring(0, nameEnd), nullptr);
+
+        String restData = stringData.substring(nameEnd+1);
+        //Apply parameters
+        std::istringstream ss(restData.toStdString());
+
+        for(const juce::Identifier& paramId : paramsIds){
+            float value;
+            // get the next param, this returns 0 if conversion was unsucessful
+            if(!(ss >> value)){
+                value = 0.0f;
             }
-            // Save name to state
-            stateTree.getChildWithName(idNodeProgram).setProperty(idProgName, stringData.substring(0, nameEnd), nullptr);
-            // Save current state
-            ValueTree apvtsCurrentState = apvts.copyState();
 
-            // Load newly generated state
-            apvts.replaceState(stateTree);
+            float normedValue = limit_range(
+                    value,
+                    0.0f,
+                    1.0f
+                    );
 
-
-            String restData = stringData.substring(nameEnd+1);
-            //Apply parameters
-            std::istringstream ss(restData.toStdString());
-
-            for(size_t i = 0; i < TOTAL_NUM; ++i){
-                float value;
-                // get the next param, this returns 0 if conversion was unsucessful
-                if(!(ss >> value)){
-                    value = 0.0f;
-                }
-
-                float normedValue = limit_range(
-                        value,
-                        0.0f,
-                        1.0f
-                        );
-
-                //Find the correct property
-                juce::RangedAudioParameter* param = apvts.getParameter(paramsIds[i]);
-                if(!param){
-                     //nullptr check
-                     juce::Logger::writeToLog("Error: Parameter with name " + paramsIds[i] + " not found inside the passed `AudioProcessorValueTreeState`!");
-                     return ValueTree();
-                }
-                //calculate the transformed value
-                float newValue = param->convertFrom0to1(normedValue);
-                param->setValueNotifyingHost(newValue);
-                //set the new value
-            }
-            //All values set, save state
-            stateTree = apvts.copyState();
-            //load old state
-            apvts.replaceState(apvtsCurrentState);
+            juce::Logger::outputDebugString("Trying to map variable for "+ paramId.toString());
+            //Save the unnormed value
+            const auto& map_func = Legacy::paramMap.find(paramId)->second;
+            stateTree.setProperty(paramId, map_func(normedValue), nullptr);
         }
         return stateTree;
     }

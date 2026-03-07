@@ -20,6 +20,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
+#include <atomic>
+#include <cmath>
 //#include <vstsdk/public.sdk/source/vst2.x/audioeffectx.h>
 
 #include "BlkFxParam.h"
@@ -41,6 +43,7 @@ private:
     void initJuceParams();
     void parameterUpdated(const juce::String& parameterID, float newValue);
     void updateAllParameters();
+    void updateAllParametersAtomic();
 
     class ParamUpdateListener : public juce::AudioProcessorValueTreeState::Listener{
         DtBlkFxAudioProcessor* parent;
@@ -50,8 +53,52 @@ private:
             :parent(parent) {}
 
         void  parameterChanged (const juce::String &parameterID, float newValue) override {
-            juce::Logger::outputDebugString("Callback: Parameter " + parameterID + " changed to " + juce::String(newValue));
-            parent->parameterUpdated(parameterID, newValue);
+            //Skip processing during atomic program change to avoid state machine corruption
+            if (parent->_isChangingProgram.load(std::memory_order_acquire)) {
+                return;
+            }
+            
+            //Capture curProgram directly to ensure we update the correct program
+            unsigned int programIndex = parent->curProgram;
+            
+            //Get the current value from the ValueTree
+            auto& currentProgram = parent->_program[programIndex];
+            float currentValue = currentProgram.getProperty(parameterID, 0.0f);
+            
+            //Only update if the value has actually changed (with epsilon for float comparison)
+            constexpr float EPSILON = 0.0001f;
+            if (std::abs(currentValue - newValue) > EPSILON) {
+                // Host value differs from our ValueTree!
+                // Check if we just changed program - if so, the host might be sending stale values
+                if (parent->_justChangedProgram.load(std::memory_order_acquire)) {
+                    // Host is sending stale value - force host to use our value instead!
+                    juce::Logger::outputDebugString("Listener: Ignoring stale host value for " + parameterID + 
+                                                   " (host=" + juce::String(newValue) + 
+                                                   ", ours=" + juce::String(currentValue) + ")");
+                    
+                    // Force the host parameter to match our ValueTree
+                    auto* param = parent->paramsJuce.getParameter(parameterID);
+                    if (param && param->getValue() != currentValue) {
+                        param->beginChangeGesture();
+                        param->setValueNotifyingHost(currentValue);
+                        param->endChangeGesture();
+                    }
+                    return; // Don't update our ValueTree!
+                }
+                
+                // Normal parameter change from user - update ValueTree
+                juce::Logger::outputDebugString("Listener: Parameter " + parameterID + 
+                                               " changed from " + juce::String(currentValue) +
+                                               " to " + juce::String(newValue) +
+                                               " (program=" + juce::String(programIndex) + ")");
+                
+                //Update the saved preset value
+                currentProgram.setProperty(parameterID, newValue, nullptr);
+                
+                //Trigger the audio processing update
+                juce::Logger::outputDebugString("  -> Calling parameterUpdated for audio processing");
+                parent->parameterUpdated(parameterID, newValue);
+            }
         }
     };
 
@@ -64,6 +111,8 @@ private:
 public:
   CharArray<4096> g_plugin_path;
   enum { MAX_FX = 16, AUDIO_CHANNELS = BlkFxParam::AUDIO_CHANNELS };
+
+  juce::AudioProcessorValueTreeState& getParamsRef() { return paramsJuce; }
 
   DtBlkFxAudioProcessor();
   ~DtBlkFxAudioProcessor() override;
@@ -95,6 +144,10 @@ public:
   void getStateInformation(juce::MemoryBlock& destData) override;
   void setStateInformation(const void* data, int sizeInBytes) override;
   void reset() override;
+  /**
+   * Resets the parameter values of the current program to the initial factory settings.
+   **/
+  void resetCurrentProgram();
 
 private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DtBlkFxAudioProcessor)
@@ -426,6 +479,15 @@ public: // gui state stuff
   //
   bool _param_morph_mode;
   bool isMorphMode() const { return _param_morph_mode; }
+
+  // Atomic flag to indicate atomic program change is in progress
+  // Prevents parameter change callbacks from corrupting the state machine
+  // Accessed from both audio thread and GUI/host thread
+  std::atomic<bool> _isChangingProgram {false};
+  
+  // Flag to indicate we just finished a program change
+  // Used to ignore stale parameter values from host
+  std::atomic<bool> _justChangedProgram {false};
 
 public:
   // contiguous space for chunk data & presets when saving

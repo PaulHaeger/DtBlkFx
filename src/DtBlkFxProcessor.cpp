@@ -18,6 +18,7 @@
  */
 
 #include "DtBlkFxProcessor.h"
+#include "BlkFxParam.h"
 #include "DtBlkFxEditor.h"
 
 //#include <StdAfx.h>
@@ -70,12 +71,12 @@ void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
         juce::FileLogger::writeToLog(juce::String("Failure loading presets: '") + filepath.getFullPathName() + "' could not be opened.");
 
       g_blk_fx_presets.resize(20);
-      g_blk_fx_presets[0] = BlkFxParam::generateValueTree(paramsJuce);
+      g_blk_fx_presets[0] = BlkFxParam::generateValueTree();
       g_blk_fx_presets[0].getChildWithName(BlkFxParam::idNodeProgram)
                          .setProperty(BlkFxParam::idProgName, "file not found", nullptr);
       for (size_t i = 1; i < g_blk_fx_presets.size(); ++i){
           juce::String presetName =  "user " + juce::String(i);
-          g_blk_fx_presets[i] = BlkFxParam::generateValueTree(paramsJuce);
+          g_blk_fx_presets[i] = BlkFxParam::generateValueTree();
           g_blk_fx_presets[i].getChildWithName(BlkFxParam::idNodeProgram)
                            .setProperty(BlkFxParam::idProgName, presetName, nullptr);
       }
@@ -87,7 +88,7 @@ void DtBlkFxAudioProcessor::LoadPresets(const juce::File& filepath){
 
     while(!f.isExhausted()) {
         juce::String line =  f.readNextLine();
-        g_blk_fx_presets.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, line));
+        g_blk_fx_presets.push_back(BlkFxParam::loadFromLegacyFormat(line));
     }
 }
 
@@ -103,20 +104,24 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
   auto it = BlkFxParam::idIndexMap.find(parameterId);
   // safety
   if (it == BlkFxParam::idIndexMap.end()){
+    juce::Logger::writeToLog("parameterUpdated: Parameter '" + parameterId + "' not found in idIndexMap!");
     return;
   }
   unsigned int index = it->second;
+
+  juce::Logger::writeToLog("parameterUpdated: " + parameterId + " (index=" + juce::String(index) + 
+                          ") value=" + juce::String(newValue) + " at samp=" + juce::String(_curr_samp_abs));
 
   //Convert to [0,1] range, since ranges may differ (AudioParameterChoice will use integer stepping for example).
   juce::RangedAudioParameter* param = paramsJuce.getParameter(parameterId);
   if(!param){
      //nullptr check
-     juce::Logger::writeToLog("DtBlkFxProcessor::parameterUpdated: Parameter with id : '" + parameterId + "' is in range with index: " + juce::String(index) + " but not found inside the value Tree!");
+     juce::Logger::writeToLog("parameterUpdated: Parameter with id : '" + parameterId + "' is in range with index: " + juce::String(index) + " but not found inside the value Tree!");
      return;
    }
    newValue = param->convertTo0to1(newValue);
 
-
+  juce::Logger::writeToLog("  -> After convertTo0to1: " + juce::String(newValue));
 
   ScopeCriticalSection scs(_protect);
 
@@ -127,37 +132,119 @@ void DtBlkFxAudioProcessor::parameterUpdated(const juce::String& parameterId, fl
   f_param.write((char*)&value, 4);
   f_param.flush();
 #endif
-
   if (_params.putValueAt(_curr_samp_abs, index, newValue) /*already exists*/ == false) {
+    juce::Logger::writeToLog("  -> New value added to _params FIFO");
     pollUpdate(/*force*/ true);
 
     // trigger sample processing loop to check params again
     if (_params_state != PARAMS_INTERP_OK){
       _params_need_processing = true;
+      juce::Logger::writeToLog("  -> Set _params_need_processing = true");
     }
+  } else {
+    juce::Logger::writeToLog("  -> Value already exists in _params FIFO (updated)");
   }
-  if(index >= BlkFxParam::NUM_GLOBAL_PARAMS){
-  //Fx Param set => Update Fx State
-      unsigned int shifted = (index - BlkFxParam::NUM_GLOBAL_PARAMS);
-      unsigned int group = shifted / BlkFxParam::NUM_FX_PARAMS;
-      unsigned int fx_param_id = shifted % BlkFxParam::NUM_FX_PARAMS;
-      juce::Logger::writeToLog("DtBlkFxProcessor::parameterUpdated: Fx " + juce::String(group) + ", Parameter " + juce::String(fx_param_id) + " set to: " + juce::String(newValue));
-  }
-
-
-  //TODO: GUI Connection
-  //if(gui())
-  // gui()->setParameter(index, value);
 }
 
 void DtBlkFxAudioProcessor::updateAllParameters(){
     juce::Logger::outputDebugString("updateAllParameters Called!");
     for(size_t i = 0; i < BlkFxParam::paramsIds.size(); ++i){
-        float value = paramsJuce.getRawParameterValue(BlkFxParam::paramsIds[i])->load();
-        auto* param = paramsJuce.getParameter(BlkFxParam::paramsIds[i]);
+        auto& paramId = BlkFxParam::paramsIds[i];
+        float value = _program[getCurrentProgram()].getProperty(paramId);
+        //float value = _params.getOutputNext(i);
+        auto* param = paramsJuce.getParameter(paramId);
+        param->beginChangeGesture();
         param->setValueNotifyingHost(value);
+        param->endChangeGesture();
         //parameterUpdated(BlkFxParam::paramsIds[i].toString(),);
     }
+}
+
+void DtBlkFxAudioProcessor::updateAllParametersAtomic(){
+    juce::Logger::outputDebugString("updateAllParametersAtomic Called!");
+    juce::Logger::outputDebugString("  curProgram=" + juce::String(curProgram) + 
+                                   ", _program.size()=" + juce::String(_program.size()));
+    juce::Logger::outputDebugString("  _curr_samp_abs=" + juce::String(_curr_samp_abs) +
+                                   ", _blk_samp_abs=" + juce::String(_blk_samp_abs));
+    
+    // Set the atomic flag to prevent callbacks from processing parameter changes
+    // This ensures all parameters are updated before the state machine processes them
+    _isChangingProgram.store(true, std::memory_order_release);
+    
+    // Also set the "just changed program" flag to ignore stale host values
+    _justChangedProgram.store(true, std::memory_order_release);
+    
+    // Update all parameter values in the ValueTree directly
+    // and write to _params FIFO while the flag is still set
+    {
+        ScopeCriticalSection scs(_protect);
+        auto& currentProgram = _program[curProgram];
+        juce::Logger::outputDebugString("  Reading from program " + juce::String(curProgram));
+        
+        // Write params at a position that has already been processed or is being processed now
+        // This ensures the params take effect immediately without interpolation delay
+        // We use _blk_samp_abs (current block position) which is always <= _curr_samp_abs
+        long writePos = _blk_samp_abs;
+        juce::Logger::outputDebugString("  Writing params at samp=" + juce::String(writePos));
+        
+        for(size_t i = 0; i < BlkFxParam::paramsIds.size(); ++i){
+            auto& paramId = BlkFxParam::paramsIds[i];
+            float value = currentProgram.getProperty(paramId, 0.0f);
+            
+            // Write to _params FIFO directly (what listener would normally do)
+            auto it = BlkFxParam::idIndexMap.find(paramId);
+            if (it != BlkFxParam::idIndexMap.end()){
+                unsigned int index = it->second;
+                _params.putValueAt(writePos, index, value);
+                juce::Logger::outputDebugString("  Wrote param " + paramId.toString() + 
+                                               " (index=" + juce::String(index) + 
+                                               ") value=" + juce::String(value) +
+                                               " at samp=" + juce::String(writePos));
+            }
+        }
+    }
+    
+    // Now that all parameters are updated, reset the changing flag
+    _isChangingProgram.store(false, std::memory_order_release);
+    
+    // Reset the state machine to ensure clean state after program change
+    _params_state = PARAMS_CHK_SYNC;
+    _params_need_processing = true;
+    
+    // Force a poll update to sync timing references
+    pollUpdate(/*force*/ true);
+    
+    // NOW notify the host about the parameter changes
+    // This must be done AFTER resetting the flag so the listener can process normally
+    juce::Logger::outputDebugString("  Notifying host of parameter changes...");
+    
+    // First, notify the host that the program has changed
+    // This forces the host to refresh its cached parameter values
+    ChangeDetails details;
+    updateHostDisplay(details.withProgramChanged(true));
+    
+    // Then update each parameter individually and force host refresh
+    for(size_t i = 0; i < BlkFxParam::paramsIds.size(); ++i){
+        auto& paramId = BlkFxParam::paramsIds[i];
+        float value = _program[curProgram].getProperty(paramId, 0.0f);
+        
+        auto* param = paramsJuce.getParameter(paramId);
+        if (param) {
+            // Force the host to update its cached value by sending the current value
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(value);
+            param->endChangeGesture();
+        }
+    }
+    
+    // Final updateHostDisplay to ensure host refreshes all parameter displays
+    updateHostDisplay(details);
+    
+    // Reset the "just changed" flag AFTER notifying host
+    // This allows the listener to detect and reject stale host values
+    _justChangedProgram.store(false, std::memory_order_release);
+    
+    juce::Logger::outputDebugString("updateAllParametersAtomic Completed!");
 }
 
 DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
@@ -212,18 +299,19 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   }
   _max_delay_n = _x3_sz - MAX_FFT_SZ - 2048;
 
-  // copy presets into the /rogram
+  // copy presets into the program
   _program.reserve( static_cast<size_t>(getNumPrograms()));
   //Deep Copy the trees
   for(auto tree : g_blk_fx_presets){
     _program.push_back(tree.createCopy());
+    juce::FileLogger::writeToLog(juce::String("Tree copied"));
   }
-  _program.push_back(BlkFxParam::loadFromLegacyFormat(paramsJuce, "> reset current <:0.0 0.062745098 0.1098039 0.35"));
+  _program.push_back(BlkFxParam::loadFromLegacyFormat("> reset current <:0.0 0.062745098 0.1098039 0.35"));
     //Use the first program
   curProgram = 0;
-  paramsJuce.replaceState(_program[0]);
-  setCurrentProgram(0);
-  updateAllParameters();
+  juce::FileLogger::writeToLog(juce::String("Cur Program set 0"));
+  //setCurrentProgram(0);
+  
 
   //TODO: Is setting input/output channel count necessary in JUCE
   //setNumInputs(AUDIO_CHANNELS);
@@ -253,6 +341,7 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
 */
 
   init();
+  juce::FileLogger::writeToLog(juce::String("Init called"));
 
   // put in arbitrary initial params - they should be overwritten by first param update
   _params.putValueAt(/*samp abs*/ 0, BlkFxParam::DELAY, 16.0f / 255.0f);
@@ -260,6 +349,9 @@ DtBlkFxAudioProcessor::DtBlkFxAudioProcessor()
   _params.putValueAt(/*samp abs*/ 0, BlkFxParam::OVERLAP, 0.35f);
 
   CreateFFTWfPlans();
+  juce::FileLogger::writeToLog(juce::String("Plans created"));
+
+  updateAllParameters();
 
   resume(); // flush buffer
 }
@@ -321,41 +413,40 @@ int DtBlkFxAudioProcessor::getCurrentProgram()
 void DtBlkFxAudioProcessor::setCurrentProgram(int index)
 {
   juce::Logger::writeToLog("DtBlkFxProcessor::setCurrentProgram(" + juce::String(index) + ")");
+  juce::Logger::writeToLog("  curProgram before=" + juce::String(curProgram) + 
+                          ", _program.size()=" + juce::String(_program.size()));
 
-  // normal case
+  //Set Update Hint
+  ChangeDetails details;
   if (index >= 0 && index < static_cast<int>(_program.size())) {
-      unsigned int oldProg = curProgram;
+      // normal case
       curProgram = static_cast<unsigned int>(index);
-      //Save old prog
-      _program[oldProg] = paramsJuce.copyState();
-      juce::Logger::writeToLog("Saved old state to program list");
-      paramsJuce.replaceState(_program[curProgram]);
-      juce::Logger::writeToLog("Replaced Program State");
-      updateHostDisplay();
+      juce::Logger::writeToLog("  curProgram after=" + juce::String(curProgram));
+      
+      // Atomically update all parameters without triggering callbacks
+      // This prevents the state machine from being corrupted by rapid parameter changes
+      updateAllParametersAtomic();
+      
+      // Notify the host that the program has changed
+      // This forces the host to update its cached parameter values
+      updateHostDisplay(details.withProgramChanged(true));
   }else {
+      //TODO: Make this an UI button instead
     // check for the special "reset current program"
-    // reset current program to defaults
-    if (idx_within(getNumPrograms(), g_blk_fx_presets)){
-      paramsJuce.replaceState(getFactoryProgramState(static_cast<unsigned int>(getCurrentProgram())));
-    }
+    juce::Logger::writeToLog("  Invalid index, resetting current program");
+    resetCurrentProgram();
+    setCurrentProgram(curProgram);
+    //TODO: Put this call to the GUI Thread
+    //updateHostDisplay(details.withProgramChanged(true));
   }
 
-  // update all params out of the program
-  //updateAllParameters();
 }
 
 const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
 {
     if(index >= 0 || static_cast<size_t>(index) < _program.size()){
-        if (index == getCurrentProgram()) {
-            //In case there was any change, show the currently used name
-            auto subTree = paramsJuce.state.getChildWithName(BlkFxParam::idNodeProgram);
-            return subTree[BlkFxParam::idProgName];
-        }else{
-            //Else use the stored name
-            auto subTree = _program[index].getChildWithName(BlkFxParam::idNodeProgram);
-            return subTree[BlkFxParam::idProgName];
-        }
+          auto subTree = _program[index].getChildWithName(BlkFxParam::idNodeProgram);
+          return subTree[BlkFxParam::idProgName];
     }
     return "Index out of Bound!";
 }
@@ -365,12 +456,6 @@ void DtBlkFxAudioProcessor::changeProgramName(int index, const juce::String& new
     if(index >= 0 || static_cast<size_t>(index) < _program.size()){
         auto pt = _program[static_cast<size_t>(index)];
         pt.getChildWithName(BlkFxParam::idNodeProgram).setProperty(BlkFxParam::idProgName, newName, nullptr);
-        if(getCurrentProgram() == index){
-            //Propagate change to APVTS as well to avoid it being overwritten again when
-            //the program is saved again.
-            paramsJuce.state.getChildWithName(BlkFxParam::idNodeProgram)
-                            .setProperty(BlkFxParam::idProgName, newName, nullptr);
-        }
     }
 }
 
@@ -457,21 +542,87 @@ juce::AudioProcessorEditor* DtBlkFxAudioProcessor::createEditor()
 
 void DtBlkFxAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-  // You should use this method to store your parameters in the memory block.
-  // You could do that either as raw data, or use the XML or ValueTree classes
-  // as intermediaries to make it easy to save and load complex data.
-  juce::ignoreUnused(destData);
+  // Create a ValueTree to hold the complete state
+  juce::ValueTree state("DtBlkFxState");
+  state.setProperty("curProgram", static_cast<int>(curProgram), nullptr);
+  state.setProperty("version", 2, nullptr); // Version 2: stores all programs
+  
+  // Store all programs
+  juce::ValueTree programsTree("Programs");
+  for (size_t i = 0; i < _program.size(); ++i) {
+    programsTree.addChild(_program[i].createCopy(), -1, nullptr);
+  }
+  state.addChild(programsTree, -1, nullptr);
+  
+  // Serialize to XML and store in MemoryBlock
+  std::unique_ptr<juce::XmlElement> xml(state.createXml());
+  copyXmlToBinary(*xml, destData);
+  
+  juce::Logger::writeToLog("getStateInformation: Saved state with " + juce::String(_program.size()) + 
+                          " programs, current program=" + juce::String(curProgram));
 }
 
 void DtBlkFxAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-  // You should use this method to restore your parameters from this memory block,
-  // whose contents will have been created by the getStateInformation() call.
-  juce::ignoreUnused(data, sizeInBytes);
+  // Parse XML from MemoryBlock
+  std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+  
+  if (xmlState == nullptr || !xmlState->hasTagName("DtBlkFxState")) {
+    juce::Logger::writeToLog("setStateInformation: Invalid or missing XML state!");
+    return;
+  }
+  
+  juce::ValueTree state = juce::ValueTree::fromXml(*xmlState);
+  if (!state.isValid()) {
+    juce::Logger::writeToLog("setStateInformation: Failed to parse ValueTree from XML!");
+    return;
+  }
+  
+  // Read version
+  int version = state.getProperty("version", 1);
+  juce::Logger::writeToLog("setStateInformation: Loading state version " + juce::String(version));
+  
+  // Read current program
+  int newProgram = state.getProperty("curProgram", 0);
+  juce::Logger::writeToLog("setStateInformation: Setting current program to " + juce::String(newProgram));
+  
+  // Read all programs
+  juce::ValueTree programsTree = state.getChildWithName("Programs");
+  if (programsTree.isValid()) {
+    _program.clear();
+    for (int i = 0; i < programsTree.getNumChildren(); ++i) {
+      juce::ValueTree child = programsTree.getChild(i);
+      if (child.isValid()) {
+        _program.push_back(child.createCopy());
+      }
+    }
+    juce::Logger::writeToLog("setStateInformation: Loaded " + juce::String(_program.size()) + " programs");
+  }
+  
+  // Set the current program and update all parameters
+  if (newProgram >= 0 && newProgram < static_cast<int>(_program.size())) {
+    curProgram = static_cast<unsigned int>(newProgram);
+    updateAllParametersAtomic();
+  }
+  
+  juce::Logger::writeToLog("setStateInformation: State loaded successfully!");
 }
 
 void DtBlkFxAudioProcessor::reset() {
     suspend();
+}
+
+void DtBlkFxAudioProcessor::resetCurrentProgram() {
+    juce::Logger::writeToLog("resetCurrentProgram() called! curProgram=" + juce::String(curProgram) +
+                            ", g_blk_fx_presets.size()=" + juce::String(g_blk_fx_presets.size()));
+    // reset current program to defaults
+    if (idx_within(curProgram, g_blk_fx_presets)){
+      juce::Logger::writeToLog("  Resetting program " + juce::String(curProgram) + " to factory preset");
+      _program[curProgram] = g_blk_fx_presets[curProgram].createCopy();
+      juce::Logger::writeToLog("  Reset complete");
+    } else {
+      juce::Logger::writeToLog("  ERROR: curProgram out of range!");
+    }
 }
 
 // This creates new instances of the plugin..
@@ -849,40 +1000,54 @@ inline void DtBlkFxAudioProcessor::paramsChkSync()
 // check params for "next_blk_fwd_n" samples from _blk_samp_abs to see whether we need to sync to
 // any of them
 {
+  juce::Logger::writeToLog("paramsChkSync() called");
+  
   // see whether we can skip the param sync stage because param syncing is off and not
   // automated (so that it can't be turned on)
   if (_param_sync_param == MorphParam::MODE_FIXED && _param_sync_param(/*ignored*/ 0.0f) < 0.5f) {
+    juce::Logger::writeToLog("  -> Param sync disabled, setting PARAMS_NONINTERP");
     _params_state = PARAMS_NONINTERP;
     return;
   }
 
   // chk each param set in the fifo to see whether we need to sync to it until we reach the
   // next blk position
+  int iterations = 0;
   while (1) {
+    iterations++;
     // how far forward is the next param from the previous output blk
     long param_fwd = _params.getOutputAbsSamplePos(/*next*/ true) - _blk_samp_abs;
+    
+    juce::Logger::writeToLog("  -> Iteration " + juce::String(iterations) + 
+                            ": param_fwd=" + juce::String(param_fwd) + 
+                            ", _next_blk_fwd_n=" + juce::String(_next_blk_fwd_n) +
+                            ", _min_blk_fwd_samps=" + juce::String(_min_blk_fwd_samps));
 
     // done for this state if the next param exceeds next blk position
     if (param_fwd >= _next_blk_fwd_n) {
+      juce::Logger::writeToLog("  -> param_fwd >= _next_blk_fwd_n, setting PARAMS_NONINTERP");
       _params_state = PARAMS_NONINTERP;
       return;
     }
 
     // see if this param is a candidate for syncing to
-    if (param_fwd > _min_blk_fwd_samps && _params.isAnyExplicitSet(/*next*/ true)) {
+    // NOTE: We also accept params at position 0 or very close (for immediate program changes)
+    if ((param_fwd > _min_blk_fwd_samps || param_fwd >= 0) && _params.isAnyExplicitSet(/*next*/ true)) {
 
       // should we sync the fft blk with param?
       if (getValueMorphed(&GetOutputLinInterp, _param_sync_param) > 0.5f) {
         _next_blk_fwd_n = param_fwd;
         _params_state = PARAMS_NONINTERP;
-        juce::Logger::outputDebugString(juce::String("Param sync, abs_pos=")  + juce::String(_blk_samp_abs) + juce::String(param_fwd));
+        juce::Logger::writeToLog("  -> Param sync enabled, _next_blk_fwd_n=" + juce::String(_next_blk_fwd_n));
         return;
       }
     }
 
     // if we can, go to the next param
-    if (!_params.nextOutParam())
+    if (!_params.nextOutParam()) {
+      juce::Logger::writeToLog("  -> No more params in FIFO");
       return;
+    }
   }
 }
 
@@ -896,19 +1061,35 @@ inline void DtBlkFxAudioProcessor::paramsChk()
   if (!_params_need_processing){
     return;
   }
+
+  juce::Logger::writeToLog("paramsChk() called! _params_state=" + juce::String(_params_state) +
+                          ", _blk_samp_abs=" + juce::String(_blk_samp_abs));
+
   _params_need_processing = false;
 
   // check whether we should sync with a param
   if (_params_state == PARAMS_CHK_SYNC){
+    juce::Logger::writeToLog("  -> Calling paramsChkSync()");
     paramsChkSync();
+    juce::Logger::writeToLog("  -> After paramsChkSync(), _params_state=" + juce::String(_params_state));
   }
 
   // find src position of fft blk
   long src_fft_abs = _blk_samp_abs + _next_blk_fwd_n;
 
-  // see if we can interpolate
+  // ALWAYS set the output position for reading params - this is critical!
+  // The state machine determines whether we can interpolate or just use discrete values
   if (_params_state == PARAMS_NONINTERP && _params.setOutputPos(src_fft_abs)){
     _params_state = PARAMS_INTERP_OK;
+    juce::Logger::writeToLog("  -> Set PARAMS_INTERP_OK");
+  } else if (_params_state == PARAMS_INTERP_OK) {
+    // Already in interp mode, just ensure output pos is set
+    _params.setOutputPos(src_fft_abs);
+    juce::Logger::writeToLog("  -> PARAMS_INTERP_OK maintained, output pos updated");
+  } else {
+    // Still in CHK_SYNC mode, set output pos but can't interpolate yet
+    _params.setOutputPos(src_fft_abs);
+    juce::Logger::writeToLog("  -> PARAMS_CHK_SYNC, output pos set but can't interpolate yet");
   }
 
   // number of samples to do fft blk
@@ -924,7 +1105,11 @@ inline void DtBlkFxAudioProcessor::paramsChk()
   _data_pre_x0_n = (_freq_fft_n - _time_fft_n) / 2;
 
   // find (possible) output position of the current blk using current delay
-  _delay_n = getDelaySamps(getValueMorphed(&GetOutputLinInterp, _delay_param));
+  long delay_n_new = getDelaySamps(getValueMorphed(&GetOutputLinInterp, _delay_param));
+  if(delay_n_new != _delay_n){
+      _delay_n = delay_n_new;
+      //setLatencySamples(_delay_n);
+  }
   _dst_fft_abs = src_fft_abs + _delay_n;
 
   // make sure dest position isn't in data that we've already output (i.e. behind current sample
@@ -1183,11 +1368,16 @@ inline void DtBlkFxAudioProcessor::procFFT()
 {
 int i;
 
+juce::Logger::writeToLog("procFFT() called! _freq_fft_n=" + juce::String(_freq_fft_n) + 
+                        ", _time_fft_n=" + juce::String(_time_fft_n));
+
 // run all of the 1.0 effects (collect params first & then process)
 for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
+    juce::Logger::writeToLog("  FX_" + juce::String(i+1) + " prepare()");
     _fx1_0[i].prepare();
 }
 for (i = 0; i < BlkFxParam::NUM_FX_SETS; ++i) {
+    juce::Logger::writeToLog("  FX_" + juce::String(i+1) + " process()");
     _fx1_0[i].process();
 }
 
@@ -1499,9 +1689,9 @@ inline void DtBlkFxAudioProcessor::_process(const float* const* in_buf, long buf
   ScopeCriticalSection scs(_protect);
 
   //Update Playhead Info
+  pollUpdate(/*force*/ false);
   const juce::AudioPlayHead* playhead = getPlayHead();
   lastPi = playhead->getPosition();
-  pollUpdate(/*force*/ false);
 
   copyInBuf(in_buf, buf_n);
 

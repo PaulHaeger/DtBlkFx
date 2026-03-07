@@ -43,49 +43,55 @@ class FxRun1_0
 // 1.0 effects were stateless between runs and processed via this class, one instance per effect
 {
 protected:
-  // effect name
+  /** Effect name. */
   juce::String _name;
 
-  // whether a particular fx set param is used by this effect
+  /** Whether a particular fx set param is used by this effect.*/
   bool _params_used[BlkFxParam::NUM_FX_PARAMS];
 
 public:
-  // construct with effect name
+  /** Construct the effect with the given name.*/
   FxRun1_0(juce::String name = "?")
   {
     _name = name;
 
     // default to all params being used
-    for (int i = 0; i < BlkFxParam::NUM_FX_PARAMS; i++)
+    for (int i = 0; i < BlkFxParam::NUM_FX_PARAMS; ++i)
       _params_used[i] = true;
   }
 
   virtual ~FxRun1_0() {}
 
-  // DtBlkFx calls this to perform the FFT effect
+  /** Performes the effect processing using the given state.*/
   virtual void process(FxState1_0* s) {juce::ignoreUnused(s);}
 
-  /** \brief Get the display text corresponding to "val".
+  /** \brief Appends the display text corresponding to "val".
    *
    * \pram[in] s the state of the current effect.
-   * \param[out] text the string to append the text to.
+   * \param[in, out] text the string to append the text to.
    * \param[in] val the value to output.
    **/
-  virtual juce::String& /*updated rng*/ dispVal(FxState1_0* s, juce::String& text, float /*0..1*/ val)
+  virtual juce::String& dispVal(FxState1_0* s, juce::String& text, float /*0..1*/ val)
   {
       juce::ignoreUnused(s);
       juce::ignoreUnused(val);
     return text << "-";
   }
 
-  // get the effect name
+  /** Gets the effect name. */
   virtual const juce::String& name() const { return _name; }
 
-  // return whether a particular FX_SET parameter is used (0..NUM_FX_PARAMS-1)
+  /** \brief Checks if for a particular effect the (local) parameter is used.
+   *
+   * The valid indices are between `0`` and `NUM_FX_PARAMS-1`.
+   **/
   virtual bool paramUsed(int param_idx) { return _params_used[param_idx]; }
 
-  // return true if amp is used as a mix between instead of -inf to 0 dB but normal after that
-  // default is amp is dB all the time
+   /** Return true if amp is used as a mix between instead of -inf to 0 dB but normal after that
+   * default is amp is dB all the time
+   *
+   * \return false if amp is dB and true if not.
+   **/
   virtual bool ampMixMode() { return false; }
 
 public: // methods for the GUI
@@ -100,22 +106,31 @@ public: // methods for the GUI
     return _value_presets[idx].str.toRawUTF8();
   }
 
-  //
+  /** Returns the value for parameter `idx`. If `idx` is out of range,
+   * `curr_val` will be returned.
+   **/
   virtual float getValue(size_t idx, float curr_val)
   {
     return idx >= _value_presets.size() ? curr_val : _value_presets[idx].val;
   }
 
 public: // internal stuff to do with value presets
+
   struct ValuePreset {
     float val;
     juce::String str;
   };
 
-  // internal method that uses display value to fill presets
+  /* Internal Method. Appends to `_value_presets` the number of `num_presets` values
+   * and fills them in a linear fashion, starting from `out_min`
+   * going up to one step short of `out_max`. If `rng_inclusive` is set, the values
+   * will increase fully to `out_max`
+   **/
   void _fillValues(size_t num_presets, float out_min = 0.0f, float out_max = 1.0f,
                    bool rng_inclusive = true);
 
+  /** Appends the values from the `Rng<float>` to the `_value_presets` array.
+   * */
   void _fillValues(Rng<float> values);
 
   //

@@ -31,7 +31,7 @@ inline long wrapProcess(P& p,         // class containing "process(float*, int n
 {
   p.setLen(n);
   i = wrap(i, x);
-  long n0 = x.size() - i;
+  long n0 = (long)x.size() - i;
   if (n >= n0) {
     p.process(&x[i], n0);
     n -= n0;
@@ -250,7 +250,7 @@ public: // internal method
         interp_i--;
     }
     else {
-      if (interp_i < interp.n - 1)
+      if (interp_i < (long)interp.n - 1)
         interp_i++;
     }
     curr_mult.stp = (interp[interp_i] - curr_interp) * inv_seg;

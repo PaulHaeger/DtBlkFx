@@ -493,7 +493,7 @@ template <class I, class X> inline I wrap(I i, const X& x)
 // wrap index "i" inside of "x" that contains the method "size()" returning the number of
 // elements
 {
-  I n = x.size();
+  I n = static_cast<I>(x.size());
   i %= n;
   if (i < 0)
     i += n;
@@ -771,11 +771,11 @@ template <typename T> inline Rng<T> toRng(T* ptr, int n)
 }
 template <typename T> inline Rng<T> toRng(std::vector<T>& v)
 {
-  return Rng<T>(&v[0], (int)v.size());
+  return Rng<T>(&v[0], v.size());
 }
 template <typename T> inline Rng<T> toRng(std::valarray<T>& v)
 {
-  return Rng<T>(&v[0], (int)v.size());
+  return Rng<T>(&v[0], v.size());
 }
 // return true if the 0 <= idx < rng.size()
 template <typename T> bool withinRng(int idx, const T& rng)
