@@ -51,7 +51,6 @@ FxRun1_0* FxState1_0::getFxRun(bool for_display)
 
   //
   size_t fx_type = static_cast<size_t>(BlkFxParam::getEffectType(fx_type_param));
-//  juce::Logger::writeToLog(juce::String("FxState1_0::getFxRun, Slot ") + juce::String(this->_fx_set) + ", Effect Type " + juce::String(fx_type));
 
   //
   return GetFxRun1_0(fx_type);
@@ -97,9 +96,6 @@ void FxState1_0::prepare()
   using namespace BlkFxParam;
 
   temp.fft_fx = getFxRun(false);
-  
-  juce::Logger::writeToLog("FxState1_0::prepare() for FX_" + juce::String(_fx_set + 1) + 
-                          ", type=" + juce::String(temp.fft_fx ? temp.fft_fx->name() : "null"));
 
   // copy param values to temporaries
   //
@@ -107,19 +103,12 @@ void FxState1_0::prepare()
   temp.val = _b->getValueMorphed(&GetOutputLinInterp, _param[FX_VAL]);
 
   temp.amp = BlkFxParam::getEffectAmpMult(temp.amp_param, temp.fft_fx->ampMixMode());
-  
-  juce::Logger::writeToLog("  amp_param=" + juce::String(temp.amp_param) + 
-                          ", val=" + juce::String(temp.val) +
-                          ", amp=" + juce::String(temp.amp));
 
   // freq stuff
   for (unsigned int i = 0; i < 2; ++i) {
     temp.freq_param[i] = _b->getValueMorphed(&GetOutputLinInterp, _param[i]);
     temp.fbin[i] = _b->getFFTBin(temp.freq_param[i]);
     temp.bin[i] = RndToInt(temp.fbin[i]);
-    juce::Logger::writeToLog("  freq[" + juce::String(i) + "] param=" + juce::String(temp.freq_param[i]) +
-                            ", fbin=" + juce::String(temp.fbin[i]) +
-                            ", bin=" + juce::String(temp.bin[i]));
   }
 }
 

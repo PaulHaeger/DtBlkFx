@@ -72,10 +72,7 @@ private:
                 // Check if we just changed program - if so, the host might be sending stale values
                 if (parent->_justChangedProgram.load(std::memory_order_acquire)) {
                     // Host is sending stale value - force host to use our value instead!
-                    juce::Logger::outputDebugString("Listener: Ignoring stale host value for " + parameterID + 
-                                                   " (host=" + juce::String(newValue) + 
-                                                   ", ours=" + juce::String(currentValue) + ")");
-                    
+
                     // Force the host parameter to match our ValueTree
                     auto* param = parent->paramsJuce.getParameter(parameterID);
                     if (param && param->getValue() != currentValue) {
@@ -85,18 +82,13 @@ private:
                     }
                     return; // Don't update our ValueTree!
                 }
-                
+
                 // Normal parameter change from user - update ValueTree
-                juce::Logger::outputDebugString("Listener: Parameter " + parameterID + 
-                                               " changed from " + juce::String(currentValue) +
-                                               " to " + juce::String(newValue) +
-                                               " (program=" + juce::String(programIndex) + ")");
-                
+
                 //Update the saved preset value
                 currentProgram.setProperty(parameterID, newValue, nullptr);
-                
+
                 //Trigger the audio processing update
-                juce::Logger::outputDebugString("  -> Calling parameterUpdated for audio processing");
                 parent->parameterUpdated(parameterID, newValue);
             }
         }
@@ -111,8 +103,6 @@ private:
 public:
   CharArray<4096> g_plugin_path;
   enum { MAX_FX = 16, AUDIO_CHANNELS = BlkFxParam::AUDIO_CHANNELS };
-
-  juce::AudioProcessorValueTreeState& getParamsRef() { return paramsJuce; }
 
   DtBlkFxAudioProcessor();
   ~DtBlkFxAudioProcessor() override;

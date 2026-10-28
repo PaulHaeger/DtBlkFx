@@ -109,10 +109,13 @@ namespace BlkFxParam
                     1.0f
                     );
 
-            juce::Logger::outputDebugString("Trying to map variable for "+ paramId.toString());
             //Save the unnormed value
-            const auto& map_func = Legacy::paramMap.find(paramId)->second;
-            stateTree.setProperty(paramId, map_func(normedValue), nullptr);
+            auto mapIt = Legacy::paramMap.find(paramId);
+            if(mapIt == Legacy::paramMap.end()){
+                juce::Logger::outputDebugString("Error in 'loadFromLegacyFormat': No mapping for parameter " + paramId.toString());
+                continue;
+            }
+            stateTree.setProperty(paramId, mapIt->second(normedValue), nullptr);
         }
         return stateTree;
     }

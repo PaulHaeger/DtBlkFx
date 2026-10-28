@@ -2,3 +2,18 @@
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Editor / tooling artifacts
+.cache/
+.vscode/
+Session.vim
+tags
+compile_commands.json
+.ycm_extra_conf.py
+
+# Logs and crash dumps
+*.log
+core
+
+# AI chat logs
+chat_log.md
