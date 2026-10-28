@@ -407,7 +407,7 @@ void DtBlkFxAudioProcessor::setCurrentProgram(int index)
 
 const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
 {
-    if(index >= 0 || static_cast<size_t>(index) < _program.size()){
+    if(index >= 0 && static_cast<size_t>(index) < _program.size()){
           auto subTree = _program[index].getChildWithName(BlkFxParam::idNodeProgram);
           return subTree[BlkFxParam::idProgName];
     }
@@ -416,7 +416,7 @@ const juce::String DtBlkFxAudioProcessor::getProgramName(int index)
 
 void DtBlkFxAudioProcessor::changeProgramName(int index, const juce::String& newName)
 {
-    if(index >= 0 || static_cast<size_t>(index) < _program.size()){
+    if(index >= 0 && static_cast<size_t>(index) < _program.size()){
         auto pt = _program[static_cast<size_t>(index)];
         pt.getChildWithName(BlkFxParam::idNodeProgram).setProperty(BlkFxParam::idProgName, newName, nullptr);
     }

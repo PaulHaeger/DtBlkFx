@@ -17,3 +17,8 @@ core
 
 # AI chat logs
 chat_log.md
+
+# Local reference files (VST2 legacy sources, must not be published)
+src/dtblkfx/
+src/DtBlkFxAudioParameterFloat.cpp
+src/DtBlkFxAudioParameterFloat.h
